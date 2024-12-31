@@ -1,0 +1,72 @@
+/* src/frontend/app/global.css */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --foreground-rgb: 0, 0, 0;
+  --background-start-rgb: 214, 219, 220;
+  --background-end-rgb: 255, 255, 255;
+  --sidebar-width: 16rem;
+}
+
+body {
+  color: rgb(var(--foreground-rgb));
+  background: linear-gradient(
+      to bottom,
+      transparent,
+      rgb(var(--background-end-rgb))
+    )
+    rgb(var(--background-start-rgb));
+}
+
+@layer base {
+  h1 {
+    @apply text-2xl font-bold mb-4;
+  }
+  h2 {
+    @apply text-xl font-semibold mb-3;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply px-4 py-2 rounded font-medium;
+  }
+  .btn-primary {
+    @apply bg-blue-500 text-white hover:bg-blue-600;
+  }
+  .btn-secondary {
+    @apply bg-gray-300 text-gray-800 hover:bg-gray-400;
+  }
+
+  .main-layout {
+    @apply flex h-screen bg-gray-100;
+  }
+
+  .sidebar-left {
+    @apply w-[var(--sidebar-width)] bg-white shadow-lg flex flex-col;
+  }
+
+  .content-area {
+    @apply flex-1 overflow-y-auto p-8 bg-gray-50;
+  }
+
+  .sidebar-right {
+    @apply w-[var(--sidebar-width)] bg-gray-50 shadow-lg flex flex-col p-4;
+  }
+}
+
+@layer utilities {
+  .text-shadow {
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
+  }
+
+  .scrollbar-hide {
+    -ms-overflow-style: none; /* Internet Explorer 10+ */
+    scrollbar-width: none; /* Firefox */
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none; /* Chrome, Safari, and Opera */
+  }
+}
