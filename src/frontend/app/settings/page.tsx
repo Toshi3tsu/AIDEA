@@ -3,8 +3,11 @@
 
 import { useState, useEffect } from 'react'
 import { Upload, Edit2, Trash2, Search } from 'lucide-react'
+import BpmnViewer from '../generate/BpmnViewer';
+import useFlowStore from '../store/flowStore';
 
 export default function Settings() {
+  const { generatedFlow, setGeneratedFlow } = useFlowStore();
   const [uploadProgress, setUploadProgress] = useState(0)
   const [solutions, setSolutions] = useState([])
   const [searchTerm, setSearchTerm] = useState('')
@@ -87,6 +90,15 @@ export default function Settings() {
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Settings</h1>
 
+      {generatedFlow ? (
+        <div className="mt-6">
+          <h2 className="text-xl font-semibold mb-4">保存された業務フロー図</h2>
+          <BpmnViewer xml={generatedFlow} />
+        </div>
+      ) : (
+        <p className="text-gray-500">まだ生成されたフローはありません。</p>
+      )}
+      
       <div className="bg-white p-6 rounded-lg shadow">
         <h2 className="text-xl font-semibold mb-4">Upload Solution Data</h2>
         <div className="flex items-center space-x-4">

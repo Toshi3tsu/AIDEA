@@ -1,3 +1,4 @@
+// /src/frontend/tsconfig.json
 {
   "compilerOptions": {
     "lib": ["dom", "dom.iterable", "esnext"],
@@ -18,8 +19,9 @@
         "name": "next"
       }
     ],
+    "baseUrl": "./src/frontend",
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["*"]
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],

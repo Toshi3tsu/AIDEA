@@ -1,7 +1,7 @@
 # src/backend/api/ai.py
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from llm_service import generate_business_flow
+from llm_service import generate_bpmn_flow
 from llm_service import analyze_business_flow  # 仮想のAIサービス
 from llm_service import evaluate_solutions  # 仮想のAIサービス
 
@@ -30,12 +30,13 @@ class SolutionEvaluationResponse(BaseModel):
 @router.post("/ai/generate-flow", response_model=BusinessFlowResponse)
 async def generate_flow(request: BusinessFlowRequest):
     try:
-        flow = generate_business_flow(request.customer_info, request.issues)
-        return BusinessFlowResponse(flow=flow)
+        # BPMN形式の業務フローを生成
+        bpmn_flow = generate_bpmn_flow(request.customer_info, request.issues)
+        return BusinessFlowResponse(flow=bpmn_flow)
     except Exception as e:
         import logging
-        logging.error(f"業務フローの生成中にエラー: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"業務フローの生成に失敗しました: {str(e)}")
+        logging.error(f"BPMNフローの生成中にエラー: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"BPMNフローの生成に失敗しました: {str(e)}")
 
 @router.post("/ai/analyze-business-flow", response_model=BusinessFlowAnalysisResponse)
 async def analyze_business_flow_endpoint(request: BusinessFlowAnalysisRequest):

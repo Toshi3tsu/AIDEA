@@ -3,6 +3,8 @@
 
 import { useReducer, useEffect } from 'react';
 import { RefreshCw } from 'lucide-react';
+import BpmnViewer from './BpmnViewer';
+import useFlowStore from '../store/flowStore';
 
 interface Solution {
   id: string;
@@ -89,8 +91,10 @@ function reducer(state: State, action: Action): State {
 
 export default function Generate() {
   const [state, dispatch] = useReducer(reducer, initialState);
+  const { generatedFlow, setGeneratedFlow } = useFlowStore();
 
   useEffect(() => {
+    dispatch({ type: 'SET_GENERATED_FLOW', payload: generatedFlow });
     const fetchSolutions = async () => {
       try {
         const response = await fetch('http://127.0.0.1:8000/api/solutions');
@@ -103,12 +107,12 @@ export default function Generate() {
       }
     };
     fetchSolutions();
-  }, []);
+  }, [generatedFlow]);
 
   const handleGenerateFlow = async () => {
     dispatch({ type: 'SET_LOADING', payload: true });
     try {
-      const response = await fetch('http://127.0.0.1:8000/api/ai/generate-flow', {
+      const response = await fetch('http://127.0.0.1:8000/api/ai/generate-flow', { 
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -120,13 +124,15 @@ export default function Generate() {
       });
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.detail || '業務フローの生成に失敗しました。');
+        throw new Error(errorData.detail || 'BPMNの生成に失敗しました。');
       }
       const data = await response.json();
-      dispatch({ type: 'SET_GENERATED_FLOW', payload: data.flow });
+      const cleanedFlow = data.flow.trim();
+      dispatch({ type: 'SET_GENERATED_FLOW', payload: cleanedFlow });
+      setGeneratedFlow(cleanedFlow);
     } catch (error) {
-      console.error('Error generating flow:', error);
-      alert('業務フローの生成に失敗しました。');
+      console.error('Error generating BPMN:', error);
+      alert('BPMNの生成に失敗しました。');
     } finally {
       dispatch({ type: 'SET_LOADING', payload: false });
     }
@@ -193,6 +199,7 @@ export default function Generate() {
 
   const handleReset = () => {
     dispatch({ type: 'RESET' });
+    useFlowStore.getState().setGeneratedFlow('');
   };
 
   const renderStep = () => {
@@ -252,6 +259,12 @@ export default function Generate() {
     <div className="space-y-6">
       <h1 className="text-2xl font-bold font-custom">Analyzer</h1>
       {renderStep()}
+      {state.generatedFlow && (
+        <div className="mt-6">
+          <h2 className="text-xl font-semibold mb-4">生成された業務フロー図</h2>
+          <BpmnViewer xml={state.generatedFlow} />
+        </div>
+      )}
     </div>
   );
 }
@@ -281,7 +294,7 @@ const Step1 = ({
   useEffect(() => {
     // 初期テンプレートを設定
     setCustomerInfo('倉庫会社');
-    setIssues('パレットの企画の違いや人手不足等もあり、荷下ろしに時間がかかっているため、物流のボトルネックになっている。そのため、荷下ろしの待機列が発生し、時間短縮のために作業にドライバーが駆り出されることになり、負担がかかっている。');
+    setIssues('パレットの規格の違いや人手不足等もあり、荷下ろしに時間がかかっているため、物流のボトルネックになっている。そのため、荷下ろしの待機列が発生し、時間短縮のために作業にドライバーが駆り出されることになり、負担がかかっている。');
   }, []); // 依存配列に setter を入れる
 
   return (
@@ -309,13 +322,16 @@ const Step1 = ({
         {loading ? '生成中...' : '業務フローを生成'}
       </button>
       {generatedFlow && (
+        <div className="mt-4">
+        <h3 className="text-lg font-medium mb-2">生成された業務フロー:</h3>
         <textarea
-          className="w-full p-2 border rounded mt-4"
+          className="w-full p-2 border rounded mt-2"
           value={generatedFlow}
           readOnly
-          rows={15}
+          rows={3}
         />
-      )}
+      </div>
+    )}
       <div className="flex justify-end mt-4">
         <button
           onClick={nextStep}

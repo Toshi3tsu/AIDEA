@@ -3,67 +3,66 @@ import os
 import openai
 from openai import OpenAI
 from dotenv import load_dotenv
+import logging
+import json
 
 load_dotenv()
 
 client = OpenAI(api_key = os.getenv("OPENAI_API_KEY"))
 
-def generate_business_flow(customer_info: str, issues: str) -> str:
-    import logging
+def generate_bpmn_flow(customer_info: str, issues: str) -> str:
+    """
+    顧客情報と課題に基づいて、BPMN XML形式の業務フローを生成します。
+    """
     prompt = f"""
-    以下の顧客情報と課題に基づいて、業界やサプライチェーンの全体最適の視点から、複数のソリューションを提案するために必要な詳細な分析と業務フローを生成してください。
+    以下の顧客情報と課題に関連する、業務フローをBPMN XML形式で生成してください。
+    - BPMN XMLは<bpmn-js>で正しく表示されるように、BPMN.io互換である必要があります。
+    - 外枠となる<definitions>、<process>、<bpmndi:BPMNDiagram>要素を以下のテンプレートで固定し、内部の要素をルールに従って構築してください。
+
+    【固定テンプレート】（内部はAIが生成）
+    ```xml
+    <?xml version="1.0" encoding="UTF-8"?>
+    <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" 
+                 xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+                 xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" 
+                 xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" 
+                 xmlns:di="http://www.omg.org/spec/DD/20100524/DI" 
+                 id="Definitions_1" 
+                 targetNamespace="http://bpmn.io/schema/bpmn">
+      <process id="Process_1" name="Generated Process" isExecutable="true">
+        <!-- プロセス要素をここに生成 -->
+      </process>
+      <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+        <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Process_1">
+          <!-- 図形情報をここに生成 -->
+        </bpmndi:BPMNPlane>
+      </bpmndi:BPMNDiagram>
+    </definitions>
+    ```
+
+    【ルール】
+    1. **プロセス要素**
+     - `<startEvent>`、`<task>`、`<exclusiveGateway>`、`<endEvent>`を含める。
+     - すべてのプロセス要素には、一意の`id`と`name`を設定する。
+    2. **シーケンスフロー**
+     - 各プロセス要素を接続する`<sequenceFlow>`を定義する。
+     - `sourceRef`および`targetRef`が正確な`id`を指していることを確認する。
+    3. **図形情報**
+     - 各プロセス要素には、対応する`<bpmndi:BPMNShape>`を定義する。
+     - `bpmnElement`属性はプロセス要素の`id`と一致させる。
+    4. **エッジ情報**
+     - 各シーケンスフローには、対応する`<bpmndi:BPMNEdge>`を定義する。
+     - `bpmnElement`属性はシーケンスフローの`id`と一致させる。
+    - `waypoint`を2点以上定義し、正確な接続を示す。
+    5. **位置情報**
+     - 各`<bpmndi:BPMNShape>`および`<bpmndi:BPMNEdge>`に正確な位置情報（`x`、`y`）を含める。
+     - `dc:Bounds`および`di:waypoint`の値が論理的に正しいことを確認する。
 
     顧客情報:
     {customer_info}
 
     課題:
     {issues}
-
-    ## 分析と業務フロー生成のステップ
-
-    **ステップ1: ステークホルダーの特定と関係性の可視化**
-    - 顧客企業内の関係者（部署、役職など）だけでなく、サプライヤー、パートナー企業、規制当局など、関連する全てのステークホルダーを洗い出してください。
-    - 各ステークホルダー間の関係性（情報の流れ、依存関係、影響力など）を明確に記述してください。可能であれば、関係性を図示するためのアイデアも出力してください（例：〇〇部署から△△部署へXX情報が共有される、など）。
-    - 特に、今回の課題に直接的・間接的に関わるステークホルダーを重点的に分析してください。
-
-    **ステップ2: 多層的な業務フローの可視化**
-    - 特定されたステークホルダーを考慮し、現状の業務フローを詳細に記述してください。主要な業務プロセスだけでなく、それを構成するより細かいサブプロセス、担当者、使用されるシステム、ドキュメントなども含めてください。
-    - 業務フローは、エンドツーエンドで可視化し、サプライチェーン全体や業界全体の視点も含めてください。
-    - 異なる粒度で業務フローを表現してください（例：高レベルの概略フローと、特定の課題に関連する詳細フロー）。
-
-    **ステップ3: ボトルネックの特定と影響範囲の明確化**
-    - 可視化された業務フローの中から、課題の原因となっている可能性のあるボトルネックを特定してください。
-    - ボトルネックは、業務効率の低下、コスト増、品質低下などを引き起こす箇所です。
-    - 特定されたボトルネックが、顧客企業内だけでなく、他のステークホルダーやサプライチェーン全体にどのような影響を与えているかを具体的に記述してください。定量的な影響（コスト増、リードタイムの遅延など）も可能な範囲で示してください。
-
-    **ステップ4: 本質的な課題の特定**
-    - 特定されたボトルネックの根本原因を深掘りしてください。「なぜなぜ分析」などの手法を用いて、表面的に見えている課題だけでなく、より根本的な問題点を特定してください。
-
-    ## 出力形式
-
-    分析結果と業務フローは、以下の形式で構造化して記述してください。
-
-    **1. ステークホルダー一覧と関係性**
-    - ステークホルダー名:
-    - 関係性詳細:
-
-    **2. 現状の業務フロー**
-    - プロセス名:
-    - 詳細な手順:
-    - 担当者:
-    - 使用システム/ツール:
-    - データフロー:
-
-    **3. ボトルネック**
-    - ボトルネックとなっている箇所:
-    - 課題:
-    - 影響範囲: (顧客企業内、サプライヤー、顧客など)
-    - 定量的な影響: (可能な範囲で)
-
-    **4. 本質的な課題**
-    - 根本原因:
-
-    上記のステップと出力形式に従い、詳細な分析と業務フローを生成してください。
     """
     # OpenAI API 呼び出し
     logging.info("OpenAI APIにリクエストを送信中...")
@@ -74,12 +73,41 @@ def generate_business_flow(customer_info: str, issues: str) -> str:
                 {"role": "system", "content": "あなたは、経験豊富な業務/ITコンサルタントです。"},
                 {"role": "user", "content": prompt},
             ],
-            max_tokens=8000,
-            temperature=0.7,
+            functions=[
+                {
+                    "name": "generate_bpmn",
+                    "description": "BPMN XML形式の業務フローを生成します。",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "bpmn_xml": {
+                                "type": "string",
+                                "description": "正確なBPMN XMLデータを含む文字列"
+                            }
+                        },
+                        "required": ["bpmn_xml"]
+                    }
+                }
+            ],
+            function_call={"name": "generate_bpmn"},  # Structured Outputを利用
+            max_tokens=4000,
+            temperature=0.5,
         )
-        logging.info("OpenAI APIからの応答を解析中...")
-        flow = response.choices[0].message.content.strip()
-        return flow
+
+        # Structured Output解析
+        function_call = response.choices[0].message.function_call
+        arguments = function_call.arguments
+        
+        # JSONパース
+        parsed_arguments = json.loads(arguments)
+        bpmn_flow = parsed_arguments.get("bpmn_xml", "").strip()
+        
+        if not bpmn_flow:
+            raise ValueError("BPMN XMLが生成されませんでした。")
+        
+        logging.info("BPMN XMLが正常に生成されました。")
+        return bpmn_flow
+
     except Exception as e:
         logging.error(f"OpenAI APIエラー: {str(e)}", exc_info=True)
         raise RuntimeError(f"AI APIエラー: {str(e)}")
