@@ -43,7 +43,7 @@ export default function Sidebar() {
           value={apiKey}
           onChange={(e) => setApiKey(e.target.value)}
         />
-        <button className="mt-2 w-full bg-blue-500 text-white px-4 py-2 rounded flex items-center justify-center">
+        <button className="mt-2 w-full bg-[#173241] text-white px-4 py-2 rounded flex items-center justify-center">
           <Save className="mr-2 h-4 w-4" />
           Save API Key
         </button>

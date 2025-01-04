@@ -15,7 +15,8 @@ def generate_bpmn_flow(customer_info: str, issues: str) -> str:
     顧客情報と課題に基づいて、BPMN XML形式の業務フローを生成します。
     """
     prompt = f"""
-    以下の顧客情報と課題に関連する、業務フローをBPMN XML形式で生成してください。
+    以下の顧客情報と課題に関連する、詳細な業務フローをBPMN XML形式で生成してください。
+    前後の工程や関連する管理業務も含めて、包括的な業務フローを作成してください。
     - BPMN XMLは<bpmn-js>で正しく表示されるように、BPMN.io互換である必要があります。
     - 外枠となる<definitions>、<process>、<bpmndi:BPMNDiagram>要素を以下のテンプレートで固定し、内部の要素をルールに従って構築してください。
 
@@ -44,6 +45,7 @@ def generate_bpmn_flow(customer_info: str, issues: str) -> str:
     1. **プロセス要素**
      - `<startEvent>`、`<task>`、`<exclusiveGateway>`、`<endEvent>`を含める。
      - すべてのプロセス要素には、一意の`id`と`name`を設定する。
+     - 前後のプロセス（例: 他の企業や他の業務）を`pool`や`lane`で分けて表示。
     2. **シーケンスフロー**
      - 各プロセス要素を接続する`<sequenceFlow>`を定義する。
      - `sourceRef`および`targetRef`が正確な`id`を指していることを確認する。

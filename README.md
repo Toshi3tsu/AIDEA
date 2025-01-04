@@ -30,9 +30,13 @@ project_root/
 │   │   │   ├── Sidebar.tsx
 │   │   │   └── RightSidebar.tsx
 │   │   ├── generate/
+│   │   │   ├── BpmnViewer.tsx
 │   │   │   └── page.tsx
 │   │   ├── settings/
 │   │   │   └── page.tsx
+│   │   ├── store/
+│   │   │   ├── projectStore.ts
+│   │   │   └── flowStore.ts
 │   │   ├── layout.tsx
 │   │   ├── page.tsx
 │   │   │── globals.css

@@ -1,7 +1,7 @@
 # src/backend/main.py
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from api import proposals, solutions, ai, project_tasks
+from api import proposals, solutions, ai, project_tasks, projects
 from dotenv import load_dotenv
 
 # .env ファイルの読み込み
@@ -23,6 +23,7 @@ app.include_router(proposals.router, prefix="/api")
 app.include_router(solutions.router, prefix="/api")
 app.include_router(ai.router, prefix="/api")
 app.include_router(project_tasks.router, prefix="/api")
+app.include_router(projects.router, prefix="/api")
 
 @app.get("/")
 def root():

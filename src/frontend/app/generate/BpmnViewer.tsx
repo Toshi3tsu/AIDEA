@@ -1,14 +1,17 @@
+// src/frontend/app/components/BpmnViewer.tsx
 import React, { useEffect, useRef } from 'react';
 import BpmnModeler from 'bpmn-js/lib/Modeler';
 import 'bpmn-js/dist/assets/diagram-js.css';
 import 'bpmn-js/dist/assets/bpmn-font/css/bpmn-embedded.css';
 import useFlowStore from '../store/flowStore';
+import axios from 'axios';
 
 interface BpmnViewerProps {
   xml: string;
+  projectId: string;
 }
 
-const BpmnViewer: React.FC<BpmnViewerProps> = ({ xml }) => {
+const BpmnViewer: React.FC<BpmnViewerProps> = ({ xml, projectId }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const modelerRef = useRef<BpmnModeler | null>(null);
   const { setGeneratedFlow } = useFlowStore();
@@ -34,8 +37,12 @@ const BpmnViewer: React.FC<BpmnViewerProps> = ({ xml }) => {
       const eventBus = modelerRef.current.get('eventBus');
       eventBus.on('commandStack.changed', async () => {
         try {
-          const { xml } = await modelerRef.current!.saveXML({ format: true });
-          setGeneratedFlow(xml);
+          const { xml: updatedXml } = await modelerRef.current!.saveXML({ format: true });
+          setGeneratedFlow(updatedXml);
+          // バックエンドにフローを保存
+          await axios.put(`http://127.0.0.1:8000/api/projects/${projectId}/flow`, {
+            bpmn_xml: updatedXml,
+          });
         } catch (err) {
           console.error('BPMN XMLのエクスポートエラー:', err);
         }
@@ -49,7 +56,7 @@ const BpmnViewer: React.FC<BpmnViewerProps> = ({ xml }) => {
         modelerRef.current = null;
       }
     };
-  }, [xml, setGeneratedFlow]);
+  }, [xml, setGeneratedFlow, projectId]);
 
   return (
     <div ref={containerRef} style={{ width: '100%', height: '400px', border: '1px solid #ccc' }} />

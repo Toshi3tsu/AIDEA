@@ -1,12 +1,11 @@
-// src/frontend/app/generate/page.tsx
+// src/frontend/app/generate/[projectId]/page.tsx
 'use client'
 
-import { useReducer, useEffect, useState } from 'react';
-import { RefreshCw } from 'lucide-react';
-import BpmnViewer from './BpmnViewer';
-import useFlowStore from '../store/flowStore';
+import { useReducer, useEffect } from 'react';
+import { useParams } from 'next/navigation';
+import BpmnViewer from '../BpmnViewer';
+import useFlowStore from '../../store/flowStore';
 import axios from 'axios';
-import Select from 'react-select';
 
 interface Solution {
   id: string;
@@ -101,26 +100,31 @@ function reducer(state: State, action: Action): State {
 
 export default function Generate() {
   const [state, dispatch] = useReducer(reducer, initialState);
-  const { generatedFlow, setGeneratedFlow } = useFlowStore();
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
-  const [loadingProjects, setLoadingProjects] = useState<boolean>(true);
+  const { projectId } = useParams();
+  const { setGeneratedFlow } = useFlowStore();
 
   useEffect(() => {
-    fetchProjects();
-    fetchSolutions();
-  }, []);
+    if (projectId) {
+      fetchProjectDetails(projectId);
+      fetchSolutions();
+    }
+  }, [projectId]);
 
-  const fetchProjects = async () => {
-    setLoadingProjects(true);
+  const fetchProjectDetails = async (id: string) => {
     try {
-      const response = await axios.get<Project[]>('http://127.0.0.1:8000/api/projects');
-      setProjects(response.data);
+      const response = await axios.get<Project>(`http://127.0.0.1:8000/api/projects`);
+      const project = response.data.find((p) => p.id === parseInt(id));
+      if (project) {
+        dispatch({ type: 'SET_CUSTOMER_INFO', payload: project.customer_name });
+        dispatch({ type: 'SET_ISSUES', payload: project.issues });
+        dispatch({ type: 'SET_GENERATED_FLOW', payload: project.bpmn_xml });
+        setGeneratedFlow(project.bpmn_xml);
+      } else {
+        alert('プロジェクトが見つかりません。');
+      }
     } catch (error) {
-      console.error('Error fetching projects:', error);
-      alert('プロジェクトの取得に失敗しました。');
-    } finally {
-      setLoadingProjects(false);
+      console.error('Error fetching project details:', error);
+      alert('プロジェクトの詳細取得に失敗しました。');
     }
   };
 
@@ -134,20 +138,11 @@ export default function Generate() {
     }
   };
 
-  const handleProjectSelect = (project: Project) => {
-    setSelectedProject(project);
-    dispatch({ type: 'SET_CUSTOMER_INFO', payload: project.customer_name });
-    dispatch({ type: 'SET_ISSUES', payload: project.issues });
-    dispatch({ type: 'SET_GENERATED_FLOW', payload: project.bpmn_xml });
-    setGeneratedFlow(project.bpmn_xml);
+  const setSolutions = (solutions: Solution[]) => {
+    dispatch({ type: 'SET_SOLUTIONS', payload: solutions });
   };
 
   const handleGenerateFlow = async () => {
-    if (!selectedProject) {
-      alert('プロジェクトを選択してください。');
-      return;
-    }
-
     dispatch({ type: 'SET_LOADING', payload: true });
     try {
       const response = await axios.post('http://127.0.0.1:8000/api/ai/generate-flow', { 
@@ -158,12 +153,10 @@ export default function Generate() {
       dispatch({ type: 'SET_GENERATED_FLOW', payload: cleanedFlow });
       setGeneratedFlow(cleanedFlow);
       // バックエンドにフローを保存
-      await axios.put(`http://127.0.0.1:8000/api/projects/${selectedProject.id}/flow`, {
+      await axios.put(`http://127.0.0.1:8000/api/projects/${projectId}/flow`, {
         bpmn_xml: cleanedFlow,
       });
       alert('業務フローが生成されました。');
-      // プロジェクトのフラグを更新
-      fetchProjects();
     } catch (error) {
       console.error('Error generating BPMN:', error);
       alert('BPMNの生成に失敗しました。');
@@ -184,11 +177,6 @@ export default function Generate() {
   };
 
   const handleGenerateProposal = async () => {
-    if (!selectedProject) {
-      alert('プロジェクトを選択してください。');
-      return;
-    }
-
     dispatch({ type: 'SET_LOADING', payload: true });
     try {
       const response = await axios.post('http://127.0.0.1:8000/api/proposals', {
@@ -209,11 +197,6 @@ export default function Generate() {
   };
 
   const handleEvaluateSolutions = async () => {
-    if (!selectedProject) {
-      alert('プロジェクトを選択してください。');
-      return;
-    }
-
     dispatch({ type: 'SET_LOADING', payload: true });
     try {
       const response = await axios.post('http://127.0.0.1:8000/api/ai/evaluate-solutions', {
@@ -232,8 +215,6 @@ export default function Generate() {
   const handleReset = () => {
     dispatch({ type: 'RESET' });
     useFlowStore.getState().resetFlow();
-    setSelectedProject(null);
-    fetchProjects();
   };
 
   const renderStep = () => {
@@ -245,7 +226,6 @@ export default function Generate() {
             setCustomerInfo={(val) => dispatch({ type: 'SET_CUSTOMER_INFO', payload: val })}
             issues={state.issues}
             setIssues={(val) => dispatch({ type: 'SET_ISSUES', payload: val })}
-            generatedFlow={state.generatedFlow}
             handleGenerateFlow={handleGenerateFlow}
             loading={state.loading}
             nextStep={() => dispatch({ type: 'NEXT_STEP' })}
@@ -265,15 +245,15 @@ export default function Generate() {
       case 3:
         return (
           <Step3
-          evaluation={state.evaluation}
-          setEvaluation={(val) => dispatch({ type: 'SET_EVALUATION', payload: val })}
-          combination={state.combination}
-          setCombination={(val) => dispatch({ type: 'SET_COMBINATION', payload: val })}
-          handleEvaluate={handleEvaluateSolutions}
-          handleGenerateProposal={handleGenerateProposal}
-          loading={state.loading}
-          nextStep={() => dispatch({ type: 'NEXT_STEP' })}
-          prevStep={() => dispatch({ type: 'PREV_STEP' })}
+            evaluation={state.evaluation}
+            setEvaluation={(val) => dispatch({ type: 'SET_EVALUATION', payload: val })}
+            combination={state.combination}
+            setCombination={(val) => dispatch({ type: 'SET_COMBINATION', payload: val })}
+            handleEvaluate={handleEvaluateSolutions}
+            handleGenerateProposal={handleGenerateProposal}
+            loading={state.loading}
+            nextStep={() => dispatch({ type: 'NEXT_STEP' })}
+            prevStep={() => dispatch({ type: 'PREV_STEP' })}
           />
         );
       case 4:
@@ -290,34 +270,34 @@ export default function Generate() {
   };
 
   return (
-    <div className="p-6 bg-gray-50 min-h-screen">
-    {/* タイトルとプロジェクト選択 */}
-    <div className="flex justify-between items-center mb-2">
-      <h1 className="text-3xl font-bold text-gray-800">ソリューション検討</h1>
-      <div className="w-1/3">
-        <Select
-          options={projects.map((project) => ({
-            value: project.id,
-            label: `${project.customer_name} - ${project.issues.substring(0, 30) || '未設定'}`,
-          }))}
-          onChange={(selectedOption) => {
-            const project = projects.find((p) => p.id === selectedOption?.value);
-            if (project) {
-              handleProjectSelect(project);
-            }
-          }}
-          placeholder="プロジェクトを選択"
-          isClearable
-        />
+    <div className="space-y-6 p-6">
+      <h1 className="text-2xl font-bold">業務フロー生成</h1>
+
+      {/* プロジェクト選択ドロップダウン */}
+      <div className="mb-6">
+        <label className="block text-gray-700 mb-2">プロジェクト選択:</label>
+        <select
+          value={selectedProjectId ?? ''}
+          onChange={handleProjectChange}
+          className="w-full p-2 border rounded"
+        >
+          <option value="">プロジェクトを選択してください</option>
+          {projects.map((project) => (
+            <option key={project.id} value={project.id}>
+              {project.customer_name} - {project.issues.substring(0, 30)}...
+            </option>
+          ))}
+        </select>
       </div>
-    </div>
 
-      {selectedProject && renderStep()}
+      {/* ステップフォーム */}
+      {selectedProjectId && renderStep()}
 
-      {selectedProject && state.generatedFlow && (
+      {/* 業務フロー表示 */}
+      {state.generatedFlow && (
         <div className="mt-6">
-          {/* <h2 className="text-xl font-semibold mb-4">生成された業務フロー図</h2> */}
-          <BpmnViewer xml={state.generatedFlow} projectId={selectedProject.id.toString()} />
+          <h2 className="text-xl font-semibold mb-4">生成された業務フロー図</h2>
+          <BpmnViewer xml={state.generatedFlow} projectId={selectedProjectId} />
         </div>
       )}
     </div>
@@ -325,12 +305,12 @@ export default function Generate() {
 }
 
 // 各ステップのコンポーネント
+
 interface Step1Props {
   customerInfo: string;
   setCustomerInfo: (val: string) => void;
   issues: string;
   setIssues: (val: string) => void;
-  generatedFlow: string;
   handleGenerateFlow: () => void;
   loading: boolean;
   nextStep: () => void;
@@ -341,65 +321,43 @@ const Step1 = ({
   setCustomerInfo,
   issues,
   setIssues,
-  generatedFlow,
   handleGenerateFlow,
   loading,
   nextStep,
 }: Step1Props) => {
-  useEffect(() => {
-    // 初期テンプレートを設定
-    setCustomerInfo('倉庫会社');
-    setIssues('パレットの規格の違いや人手不足等もあり、荷下ろしに時間がかかっているため、物流のボトルネックになっている。そのため、荷下ろしの待機列が発生し、時間短縮のために作業にドライバーが駆り出されることになり、負担がかかっている。');
-  }, []); // 依存配列に setter を入れる
-
   return (
     <div className="bg-white p-6 rounded-lg shadow">
-      <h2 className="text-xl font-semibold mb-4">ステップ1: 業務フローの可視化</h2>
+      <h2 className="text-xl font-semibold mb-4">ステップ1: 顧客情報と課題の入力</h2>
       <textarea
         className="w-full p-2 border rounded mb-4"
         placeholder="顧客情報を入力してください"
         value={customerInfo}
         onChange={(e) => setCustomerInfo(e.target.value)}
-        rows={1}
+        rows={2}
       />
       <textarea
-        className="w-full p-2 border rounded mb-2"
+        className="w-full p-2 border rounded mb-4"
         placeholder="課題を入力してください"
         value={issues}
         onChange={(e) => setIssues(e.target.value)}
-        rows={3}
+        rows={4}
       />
-      <div className="flex items-center mt-2">
-        <div className="flex justify-center flex-1">
-          <button
-            onClick={handleGenerateFlow}
-            className="px-4 py-2 bg-[#CB6CE6] text-white rounded hover:bg-[#D69292] disabled:opacity-50"
-            disabled={!customerInfo || !issues || loading}
-          >
-            {loading ? '生成中...' : 'フロー生成'}
-          </button>
-        </div>
-        <div className="flex justify-end">
-          <button
-            onClick={nextStep}
-            className="px-4 py-2 bg-[#BF4242] text-white rounded hover:bg-[#76878F] disabled:opacity-50"
-            disabled={!generatedFlow}
-          >
-            次へ
-          </button>
-        </div>
+      <button
+        onClick={handleGenerateFlow}
+        className="px-4 py-2 bg-blue-500 text-white rounded"
+        disabled={!customerInfo || !issues || loading}
+      >
+        {loading ? '生成中...' : '業務フローを生成'}
+      </button>
+      <div className="flex justify-end mt-4">
+        <button
+          onClick={nextStep}
+          className="px-4 py-2 bg-green-500 text-white rounded"
+          disabled={!customerInfo || !issues}
+        >
+          次へ
+        </button>
       </div>
-      {/* {generatedFlow && (
-        <div className="mt-4">
-        <h3 className="text-lg font-medium mb-2">生成された業務フロー:</h3>
-        <textarea
-          className="w-full p-2 border rounded mt-2"
-          value={generatedFlow}
-          readOnly
-          rows={3}
-        />
-      </div>
-    )} */}
     </div>
   );
 };
@@ -420,48 +378,46 @@ const Step2 = ({
   solutionOverview,
   nextStep,
   prevStep,
-}: Step2Props) => (
-  <div className="bg-white p-6 rounded-lg shadow">
-    <h2 className="text-xl font-semibold mb-4">ステップ2: ソリューションの選択</h2>
-    <div className="mb-4">
+}: Step2Props) => {
+  return (
+    <div className="bg-white p-6 rounded-lg shadow">
+      <h2 className="text-xl font-semibold mb-4">ステップ2: ソリューションの選択</h2>
       <select
-        className="w-full p-2 border rounded mb-2"
         value={selectedSolution}
         onChange={handleSolutionChange}
+        className="w-full p-2 border rounded mb-4"
       >
-        <option value="">Select a solution</option>
+        <option value="">ソリューションを選択してください</option>
         {solutions.map((solution) => (
           <option key={solution.id} value={solution.id}>
             {solution.name}
           </option>
         ))}
       </select>
+      {solutionOverview && (
+        <div className="mb-4 p-4 bg-gray-100 rounded">
+          <h3 className="font-medium">ソリューション概要:</h3>
+          <p>{solutionOverview}</p>
+        </div>
+      )}
+      <div className="flex justify-between">
+        <button
+          onClick={prevStep}
+          className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
+        >
+          前へ
+        </button>
+        <button
+          onClick={nextStep}
+          className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
+          disabled={!selectedSolution}
+        >
+          次へ
+        </button>
+      </div>
     </div>
-    {solutionOverview && (
-      <textarea
-        className="w-full p-2 border rounded mb-4"
-        value={solutionOverview}
-        readOnly
-        rows={3}
-      />
-    )}
-    <div className="flex justify-between">
-      <button
-        onClick={prevStep}
-        className="px-4 py-2 bg-gray-300 rounded flex items-center"
-      >
-        戻る
-      </button>
-      <button
-        onClick={nextStep}
-        className="px-4 py-2 bg-[#BF4242] text-white rounded"
-        disabled={!selectedSolution}
-      >
-        次へ
-      </button>
-    </div>
-  </div>
-);
+  );
+};
 
 interface Step3Props {
   evaluation: string;
@@ -485,50 +441,48 @@ const Step3 = ({
   loading,
   nextStep,
   prevStep,
-}: Step3Props) => (
-  <div className="bg-white p-6 rounded-lg shadow">
-    <h2 className="text-xl font-semibold mb-4">ステップ3: ソリューションの評価と組み合わせ</h2>
-    <div className="space-y-4">
+}: Step3Props) => {
+  return (
+    <div className="bg-white p-6 rounded-lg shadow">
+      <h2 className="text-xl font-semibold mb-4">ステップ3: ソリューションの評価</h2>
       <textarea
-        className="w-full p-2 border rounded"
-        placeholder="ソリューションの評価基準を入力してください"
+        className="w-full p-2 border rounded mb-4"
+        placeholder="評価基準やその他必要なデータを入力してください"
         value={evaluation}
         onChange={(e) => setEvaluation(e.target.value)}
-        rows={4}
+        rows={3}
       />
       <button
         onClick={handleEvaluate}
-        className="px-4 py-2 bg-green-500 text-white rounded"
+        className="px-4 py-2 bg-blue-500 text-white rounded mb-4"
         disabled={!evaluation || loading}
       >
-        {loading ? '評価中...' : 'AIに評価を依頼'}
+        {loading ? '評価中...' : 'ソリューションを評価'}
       </button>
       {combination && (
-        <textarea
-          className="w-full p-2 border rounded"
-          value={combination}
-          readOnly
-          rows={3}
-        />
+        <div className="mb-4 p-4 bg-gray-100 rounded">
+          <h3 className="font-medium">最適なソリューションの組み合わせ:</h3>
+          <p>{combination}</p>
+        </div>
       )}
+      <div className="flex justify-between">
+        <button
+          onClick={prevStep}
+          className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
+        >
+          前へ
+        </button>
+        <button
+          onClick={handleGenerateProposal}
+          className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
+          disabled={!combination || loading}
+        >
+          {loading ? '提案生成中...' : '提案を生成'}
+        </button>
+      </div>
     </div>
-    <div className="flex justify-between mt-4">
-      <button
-        onClick={prevStep}
-        className="px-4 py-2 bg-gray-300 rounded flex items-center"
-      >
-        戻る
-      </button>
-      <button
-        onClick={handleGenerateProposal}
-        className="px-4 py-2 bg-[#BF4242] text-white rounded"
-        disabled={!combination || loading}
-      >
-        {loading ? '生成中...' : '提案を生成'}
-      </button>
-    </div>
-  </div>
-);
+  );
+};
 
 interface FinalStepProps {
   output: string;
@@ -536,29 +490,28 @@ interface FinalStepProps {
   prevStep: () => void;
 }
 
-const FinalStep = ({
-  output,
-  handleReset,
-  prevStep,
-}: FinalStepProps) => (
-  <div className="bg-white p-6 rounded-lg shadow">
-    <h2 className="text-xl font-semibold mb-4">生成された提案</h2>
-    <div className="p-4 bg-gray-100 rounded h-64 overflow-y-auto">
-      {output}
+const FinalStep = ({ output, handleReset, prevStep }: FinalStepProps) => {
+  return (
+    <div className="bg-white p-6 rounded-lg shadow">
+      <h2 className="text-xl font-semibold mb-4">最終ステップ: 提案の確認</h2>
+      <div className="mb-4 p-4 bg-gray-100 rounded">
+        <h3 className="font-medium">生成された提案:</h3>
+        <p>{output}</p>
+      </div>
+      <div className="flex justify-between">
+        <button
+          onClick={prevStep}
+          className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
+        >
+          前へ
+        </button>
+        <button
+          onClick={handleReset}
+          className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
+        >
+          リセット
+        </button>
+      </div>
     </div>
-    <div className="flex justify-between mt-4">
-      <button
-        onClick={prevStep}
-        className="px-4 py-2 bg-gray-300 rounded flex items-center"
-      >
-        戻る
-      </button>
-      <button
-        onClick={handleReset}
-        className="px-4 py-2 bg-green-500 text-white rounded"
-      >
-        リセット
-      </button>
-    </div>
-  </div>
-);
+  );
+};

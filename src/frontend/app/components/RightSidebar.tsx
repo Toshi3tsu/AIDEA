@@ -42,7 +42,7 @@ export default function RightSidebar() {
       <div className="mt-4 border-t pt-4">
         <button
           onClick={handleCopy}
-          className="w-full flex items-center justify-center bg-blue-500 text-white px-4 py-2 rounded"
+          className="w-full flex items-center justify-center bg-[#173241] text-white px-4 py-2 rounded"
         >
           {clipboardMessage === 'Copied!' ? (
             <ClipboardCheck className="mr-2 h-4 w-4" />
