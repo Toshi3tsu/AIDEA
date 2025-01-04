@@ -23,42 +23,45 @@ sAIteki is a tool designed to visualize business workflows, identify bottlenecks
 ```plaintext
 project_root/
 │
-├── src/
-│   ├── frontend/         # Frontend application (Next.js + Tailwind CSS)
-│   │   ├── app/
+├── frontend/         # Frontend application (Next.js + Tailwind CSS)
+│   ├── app/
 │   │   ├── components/
 │   │   │   ├── Sidebar.tsx
-│   │   │   └── RightSidebar.tsx
+│   │   │   └── RightSidebar.tsx 
+│   │   ├── create-project/
+│   │   │   └── page.tsx
 │   │   ├── generate/
+│   │   │   ├── [projectId]
+│   │   │   │   └── page.tsx
 │   │   │   ├── BpmnViewer.tsx
 │   │   │   └── page.tsx
 │   │   ├── settings/
 │   │   │   └── page.tsx
 │   │   ├── store/
-│   │   │   ├── projectStore.ts
 │   │   │   └── flowStore.ts
 │   │   ├── layout.tsx
 │   │   ├── page.tsx
-│   │   │── globals.css
-│   │   ├── public/
-│   │   ├── package.json
-│   │   └── next.config.mjs
-│   │
-│   ├── backend/          # Backend application (FastAPI)
-│   │   ├── main.py
-│   │   ├── database.py
-│   │   ├── llm_service.py
-│   │   ├── api/
-│   │   │   ├── __init__.py
-│   │   │   ├── ai.py
-│   │   │   ├── proposals.py
-│   │   │   ├── project_tasks.py
-│   │   │   └── solutions.py
-│   │   └── requirements.txt
+│   │   └── globals.css
+│   ├── public/
+│   ├── package.json
+│   └── next.config.js
 │
-├── data/                 # CSV data storage
+├── backend/          # Backend application (FastAPI)
+│   ├── main.py
+│   ├── database.py
+│   ├── llm_service.py
+│   ├── api/
+│   │   ├── __init__.py
+│   │   ├── ai.py 
+│   │   ├── proposals.py
+│   │   ├── solutions.py
+│   │   └── projects.py
+│   └── requirements.txt
+│
+├── data/
 │   ├── proposals.csv
-│   └── solutions.csv
+│   ├── solutions.csv
+│   └── projects.csv
 │
 └── README.md             # Project documentation
 ```
