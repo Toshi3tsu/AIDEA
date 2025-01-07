@@ -27,7 +27,7 @@ class SolutionEvaluationRequest(BaseModel):
 class SolutionEvaluationResponse(BaseModel):
     combination: str
 
-@router.post("/ai/generate-flow", response_model=BusinessFlowResponse)
+@router.post("/generate-flow", response_model=BusinessFlowResponse)
 async def generate_flow(request: BusinessFlowRequest):
     try:
         # BPMN形式の業務フローを生成
@@ -38,7 +38,7 @@ async def generate_flow(request: BusinessFlowRequest):
         logging.error(f"BPMNフローの生成中にエラー: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"BPMNフローの生成に失敗しました: {str(e)}")
 
-@router.post("/ai/analyze-business-flow", response_model=BusinessFlowAnalysisResponse)
+@router.post("/analyze-business-flow", response_model=BusinessFlowAnalysisResponse)
 async def analyze_business_flow_endpoint(request: BusinessFlowAnalysisRequest):
     try:
         suggestions = analyze_business_flow(request.business_flow, request.issues)
@@ -46,7 +46,7 @@ async def analyze_business_flow_endpoint(request: BusinessFlowAnalysisRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"AI分析に失敗しました: {str(e)}")
 
-@router.post("/ai/evaluate-solutions", response_model=SolutionEvaluationResponse)
+@router.post("/evaluate-solutions", response_model=SolutionEvaluationResponse)
 async def evaluate_solutions_endpoint(request: SolutionEvaluationRequest):
     try:
         combination = evaluate_solutions(request.evaluation)

@@ -44,14 +44,14 @@ def write_projects(df: pd.DataFrame):
     df.to_csv(PROJECTS_CSV, index=False)
 
 # 全プロジェクトの取得
-@router.get("/projects", response_model=list[Project])
+@router.get("/", response_model=list[Project])
 async def get_projects():
     df = read_projects()
     projects = df.to_dict(orient='records')
     return projects
 
 # 新規プロジェクトの作成
-@router.post("/projects", response_model=Project, status_code=201)
+@router.post("/", response_model=Project, status_code=201)
 async def create_project(project: ProjectCreate):
     df = read_projects()
     new_id = df['id'].max() + 1 if not df.empty else 1
@@ -68,7 +68,7 @@ async def create_project(project: ProjectCreate):
     return new_project
 
 # プロジェクトの更新（顧客情報と課題）
-@router.put("/projects/{project_id}", response_model=Project)
+@router.put("/{project_id}", response_model=Project)
 async def update_project(project_id: int = Path(..., gt=0), project: ProjectUpdate = None):
     df = read_projects()
     if project_id not in df['id'].values:
@@ -83,7 +83,7 @@ async def update_project(project_id: int = Path(..., gt=0), project: ProjectUpda
     return updated_project
 
 # 業務フローの更新
-@router.put("/projects/{project_id}/flow", response_model=Project)
+@router.put("/{project_id}/flow", response_model=Project)
 async def update_flow(project_id: int = Path(..., gt=0), flow: FlowUpdate = None):
     df = read_projects()
     if project_id not in df['id'].values:
@@ -97,7 +97,7 @@ async def update_flow(project_id: int = Path(..., gt=0), flow: FlowUpdate = None
     return updated_project
 
 # 業務フローの削除
-@router.delete("/projects/{project_id}/flow", response_model=Project)
+@router.delete("/{project_id}/flow", response_model=Project)
 async def delete_flow(project_id: int = Path(..., gt=0)):
     df = read_projects()
     if project_id not in df['id'].values:
@@ -110,7 +110,7 @@ async def delete_flow(project_id: int = Path(..., gt=0)):
     return updated_project
 
 # プロジェクトの削除
-@router.delete("/projects/{project_id}", status_code=204)
+@router.delete("/{project_id}", status_code=204)
 async def delete_project(project_id: int = Path(..., gt=0)):
     df = read_projects()
     if project_id not in df['id'].values:

@@ -26,6 +26,8 @@ project_root/
 ├── frontend/         # Frontend application (Next.js + Tailwind CSS)
 │   ├── app/
 │   │   ├── components/
+│   │   │   ├── Chat.tsx
+│   │   │   ├── ManageDocuments.tsx
 │   │   │   ├── Sidebar.tsx
 │   │   │   └── RightSidebar.tsx 
 │   │   ├── create-project/
@@ -35,10 +37,14 @@ project_root/
 │   │   │   │   └── page.tsx
 │   │   │   ├── BpmnViewer.tsx
 │   │   │   └── page.tsx
+│   │   ├── manage-documents/
+│   │   │   └── page.tsx
 │   │   ├── settings/
 │   │   │   └── page.tsx
 │   │   ├── store/
-│   │   │   └── flowStore.ts
+│   │   │   ├── chatStore.tsx
+│   │   │   ├── flowStore.tsx
+│   │   │   └── projectStore.ts
 │   │   ├── layout.tsx
 │   │   ├── page.tsx
 │   │   └── globals.css
@@ -47,19 +53,23 @@ project_root/
 │   └── next.config.js
 │
 ├── backend/          # Backend application (FastAPI)
-│   ├── main.py
-│   ├── database.py
-│   ├── llm_service.py
 │   ├── api/
 │   │   ├── __init__.py
-│   │   ├── ai.py 
+│   │   ├── ai.py
+│   │   ├── chat.py
+│   │   ├── files.py
+│   │   ├── project_tasks.py
+│   │   ├── projects.py
 │   │   ├── proposals.py
-│   │   ├── solutions.py
-│   │   └── projects.py
+│   │   ├── slack.py
+│   │   └── solutions.py
+│   ├── database.py
+│   ├── llm_service.py
+│   ├── main.py
 │   └── requirements.txt
 │
 ├── data/
-│   ├── proposals.csv
+│   ├── proposal.csv
 │   ├── solutions.csv
 │   └── projects.csv
 │

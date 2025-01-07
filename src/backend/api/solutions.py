@@ -11,7 +11,7 @@ class Solution(BaseModel):
     category: str
     features: str
 
-@router.get("/solutions")
+@router.get("/")
 async def get_solutions():
     """Retrieve all solutions from the CSV."""
     try:
@@ -20,7 +20,7 @@ async def get_solutions():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to read solutions: {str(e)}")
 
-@router.get("/solutions/{solution_id}")
+@router.get("/{solution_id}")
 async def get_solution(solution_id: str):
     """Retrieve a single solution by ID."""
     try:
@@ -32,7 +32,7 @@ async def get_solution(solution_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch solution: {str(e)}")
 
-@router.post("/solutions")
+@router.post("/")
 async def create_solution(solution: Solution):
     """Add a new solution to the CSV."""
     try:
@@ -45,7 +45,7 @@ async def create_solution(solution: Solution):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to create solution: {str(e)}")
 
-@router.put("/solutions/{solution_id}")
+@router.put("/{solution_id}")
 async def update_solution(solution_id: str, updated_solution: Solution):
     """Update an existing solution in the CSV."""
     try:
@@ -59,7 +59,7 @@ async def update_solution(solution_id: str, updated_solution: Solution):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to update solution: {str(e)}")
 
-@router.delete("/solutions/{solution_id}")
+@router.delete("/{solution_id}")
 async def delete_solution(solution_id: str):
     """Delete a solution from the CSV."""
     try:

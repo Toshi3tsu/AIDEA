@@ -15,7 +15,7 @@ def generate_bpmn_flow(customer_info: str, issues: str) -> str:
     顧客情報と課題に基づいて、BPMN XML形式の業務フローを生成します。
     """
     prompt = f"""
-    以下の顧客情報と課題に関連する、詳細な業務フローをBPMN XML形式で生成してください。
+    以下の顧客情報と課題に関連する、詳細な業務フローを日本語のBPMN XML形式で生成してください。
     前後の工程や関連する管理業務も含めて、包括的な業務フローを作成してください。
     - BPMN XMLは<bpmn-js>で正しく表示されるように、BPMN.io互換である必要があります。
     - 外枠となる<definitions>、<process>、<bpmndi:BPMNDiagram>要素を以下のテンプレートで固定し、内部の要素をルールに従って構築してください。

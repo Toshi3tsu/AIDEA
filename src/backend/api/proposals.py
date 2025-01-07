@@ -11,7 +11,7 @@ class ProposalCreate(BaseModel):
     project_info: str
     solution_id: str
 
-@router.post("/proposals")
+@router.post("/")
 async def create_proposal(proposal: ProposalCreate):
     solutions = read_csv("solutions.csv")
     solution = next((s for s in solutions if s["id"] == proposal.solution_id), None)

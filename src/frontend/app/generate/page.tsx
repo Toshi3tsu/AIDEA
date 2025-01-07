@@ -3,8 +3,10 @@
 
 import { useReducer, useEffect, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
+import RightSidebar from '../components/RightSidebar';
 import BpmnViewer from './BpmnViewer';
 import useFlowStore from '../store/flowStore';
+import useProjectStore from '../store/projectStore';
 import axios from 'axios';
 import Select from 'react-select';
 
@@ -103,13 +105,18 @@ export default function Generate() {
   const [state, dispatch] = useReducer(reducer, initialState);
   const { generatedFlow, setGeneratedFlow } = useFlowStore();
   const [projects, setProjects] = useState<Project[]>([]);
-  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  const { selectedProject, setSelectedProject } = useProjectStore();
   const [loadingProjects, setLoadingProjects] = useState<boolean>(true);
 
   useEffect(() => {
-    fetchProjects();
-    fetchSolutions();
-  }, []);
+    if (selectedProject) {
+      dispatch({ type: 'SET_CUSTOMER_INFO', payload: selectedProject.customer_name });
+      dispatch({ type: 'SET_ISSUES', payload: selectedProject.issues });
+      dispatch({ type: 'SET_GENERATED_FLOW', payload: selectedProject.bpmn_xml });
+      setGeneratedFlow(selectedProject.bpmn_xml);
+      fetchSolutions();
+    }
+  }, [selectedProject]);
 
   const fetchProjects = async () => {
     setLoadingProjects(true);
@@ -291,32 +298,28 @@ export default function Generate() {
 
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
-    {/* タイトルとプロジェクト選択 */}
-    <div className="flex justify-between items-center mb-2">
-      <h1 className="text-3xl font-bold text-gray-800">ソリューション検討</h1>
-      <div className="w-1/3">
-        <Select
-          options={projects.map((project) => ({
-            value: project.id,
-            label: `${project.customer_name} - ${project.issues.substring(0, 30) || '未設定'}`,
-          }))}
-          onChange={(selectedOption) => {
-            const project = projects.find((p) => p.id === selectedOption?.value);
-            if (project) {
-              handleProjectSelect(project);
-            }
-          }}
-          placeholder="プロジェクトを選択"
-          isClearable
-        />
+      {/* タイトルとプロジェクト選択 */}
+      <div className="flex justify-between items-center mb-2">
+        <h1 className="text-3xl font-bold text-gray-800">業務コンサルAI</h1>
       </div>
-    </div>
 
       {selectedProject && renderStep()}
 
       {selectedProject && state.generatedFlow && (
         <div className="mt-6">
-          {/* <h2 className="text-xl font-semibold mb-4">生成された業務フロー図</h2> */}
+          {/* 吹き出しとアイコン */}
+          <div className="flex items-center mb-4">
+            <img
+              src="/icon.png"
+              alt="コンサルタントアイコン"
+              className="h-10 w-10 rounded-full ml-6 mr-3"
+            />
+            <div className="bg-blue-100 text-blue-800 px-4 py-2 rounded-lg shadow">
+              作成した業務フローは以下です。
+            </div>
+          </div>
+
+          {/* 業務フロー表示 */}
           <BpmnViewer xml={state.generatedFlow} projectId={selectedProject.id.toString()} />
         </div>
       )}
@@ -355,6 +358,16 @@ const Step1 = ({
   return (
     <div className="bg-white p-6 rounded-lg shadow">
       <h2 className="text-xl font-semibold mb-4">ステップ1: 業務フローの可視化</h2>
+      <div className="flex items-center mt-6">
+        <img
+          src="/icon.png"
+          alt="コンサルタントアイコン"
+          className="h-10 w-10 rounded-full mr-3 mb-4"
+        />
+        <div className="bg-blue-100 text-blue-800 px-4 py-2 rounded-lg shadow mb-4">
+          顧客に関する情報を教えてください。
+        </div>
+      </div>
       <textarea
         className="w-full p-2 border rounded mb-4"
         placeholder="顧客情報を入力してください"

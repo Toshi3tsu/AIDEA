@@ -70,3 +70,20 @@ body {
     display: none; /* Chrome, Safari, and Opera */
   }
 }
+
+.details-dropdown::-webkit-scrollbar {
+  width: 8px;
+}
+
+.details-dropdown::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+.details-dropdown::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 4px;
+}
+
+.details-dropdown::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}

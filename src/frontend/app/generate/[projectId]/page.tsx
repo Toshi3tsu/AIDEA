@@ -271,7 +271,7 @@ export default function Generate() {
 
   return (
     <div className="space-y-6 p-6">
-      <h1 className="text-2xl font-bold">業務フロー生成</h1>
+      <h1 className="text-2xl font-bold">業務コンサルエージェント</h1>
 
       {/* プロジェクト選択ドロップダウン */}
       <div className="mb-6">

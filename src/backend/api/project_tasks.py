@@ -3,7 +3,7 @@ from database import read_csv
 
 router = APIRouter()
 
-@router.get("/project-tasks")
+@router.get("/")
 async def get_project_tasks():
     try:
         tasks = read_csv("project_tasks.csv")
