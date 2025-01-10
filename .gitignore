@@ -25,6 +25,7 @@ src/backend/*.pyo
 
 # 仮想環境
 src/backend/.venv/
+src/backend/venv/
 
 # 環境変数ファイル
 src/backend/.env
