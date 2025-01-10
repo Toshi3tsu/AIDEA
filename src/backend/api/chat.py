@@ -1,19 +1,36 @@
 # backend/api/chat.py
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-import openai
+from openai import OpenAI
 import os
 from dotenv import load_dotenv
 from typing import Optional
 from .files import UploadedFile
 from .slack import get_project_slack_channel, ProjectSlackLink, project_slack_links
+import logging
+import httpx
 
 load_dotenv()
 
-router = APIRouter()
+# ログの設定
+logging.basicConfig(level=logging.DEBUG)
 
-# 環境変数からAPIキーを取得
-openai.api_key = os.getenv("OPENAI_API_KEY")
+# カスタム証明書のパス（自己署名証明書を指定）
+CUSTOM_CERT_PATH = "C:\\Users\\toshimitsu_fujiki\\Cato Networks CA.crt"
+
+# httpxクライアントを構築
+httpx_client = httpx.Client(
+    verify=CUSTOM_CERT_PATH  # 自己署名証明書を指定
+)
+
+# OpenAIクライアントにカスタムhttpxクライアントを渡す
+api_key = os.getenv("OPENAI_API_KEY")
+if not api_key:
+    raise ValueError("APIキーが設定されていません。")
+
+client = OpenAI(api_key=api_key, http_client=httpx_client)
+
+router = APIRouter()
 
 class ChatRequest(BaseModel):
     message: str
@@ -23,7 +40,7 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     response: str
 
-@router.post("/", response_model=ChatResponse)
+@router.post("/chat", response_model=ChatResponse)
 async def chat_endpoint(chat_request: ChatRequest):
     try:
         context = ""
@@ -64,16 +81,16 @@ async def chat_endpoint(chat_request: ChatRequest):
         user_message = f"ユーザー: {chat_request.message}\nAI:"
 
         # OpenAI GPTへのリクエスト
-        response = openai.Completion.create(
-            engine="text-davinci-003",  # 使用するモデル
+        response = client.chat.completions.create(
+            engine="gpt-4o-mini",  # 使用するモデル
             prompt=context + user_message,
-            max_tokens=500,
+            max_tokens=1000,
             n=1,
             stop=["ユーザー:", "AI:"],
-            temperature=0.7,
+            temperature=0,
         )
 
-        ai_response = response.choices[0].text.strip()
+        ai_response = response.choices[0].message.content.strip()
 
         return ChatResponse(response=ai_response)
 

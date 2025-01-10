@@ -22,7 +22,7 @@ export default function Sidebar() {
   return (
     <div className="w-64 bg-white shadow-lg flex flex-col">
       {/* サイドバーヘッダー */}
-      <div className="px-4 py-2 border-b">
+      <div className="px-4 py-2 mr-4 border-b">
         <img src="/logo.png" alt="Logo" className="w-32 h-auto mx-auto" />
       </div>
 
@@ -32,13 +32,13 @@ export default function Sidebar() {
           aria-current={isActive('/') ? 'page' : undefined}
         >
           <Home className="mr-3 h-5 w-5" />
-          ダッシュボード
+          プロジェクトボード
         </Link>
         <Link href="/generate" className={`flex items-center px-4 py-2 mt-2 text-gray-700 ${isActive('/generate') ? 'bg-gray-200 font-bold' : ''}`}
           aria-current={isActive('/generate') ? 'page' : undefined}
         >
           <PlusCircle className="mr-3 h-5 w-5" />
-          業務コンサルAI
+          課題解決AI
         </Link>
         <Link href="/manage-documents" className={`flex items-center px-4 py-2 mt-2 text-gray-700 rounded ${isActive('/manage-documents') ? 'bg-gray-200 font-bold' : ''}`}
           aria-current={isActive('/manage-documents') ? 'page' : undefined}
@@ -51,6 +51,13 @@ export default function Sidebar() {
         >
           <Settings className="mr-3 h-5 w-5" />
           設定
+        </Link>
+        <hr className="my-4 border-gray-300" />
+        <Link href="/product-management" className={`flex items-center px-4 py-2 mt-2 text-gray-700 ${isActive('/product-management') ? 'bg-gray-200 font-bold' : ''}`}
+          aria-current={isActive('/product-management') ? 'page' : undefined}
+        >
+          <FileText className="mr-3 h-5 w-5" />
+          プロダクト管理
         </Link>
       </nav>
       <div className="px-4 py-4 border-t">

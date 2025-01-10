@@ -58,7 +58,7 @@ export default function Chat() {
 
   return (
     <div className="flex flex-col h-full">
-      <h2 className="text-2xl font-bold mb-4">生成AIチャット</h2>
+      <h2 className="text-2xl font-bold mb-4">AIチャット</h2>
 
       {/* チャットメッセージ表示 */}
       <div className="flex-1 overflow-y-auto mb-4 bg-white p-4 rounded shadow">
@@ -72,19 +72,19 @@ export default function Chat() {
             >
               {msg.sender === 'ai' && (
                 <div className="flex-shrink-0 mr-2">
-                  <FaRobot className="text-blue-500" size={24} />
+                  <FaRobot className="text-[#CB6CE6]" size={24} />
                 </div>
               )}
               <div
                 className={`max-w-xs rounded-lg px-4 py-2 ${
-                  msg.sender === 'user' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-800'
+                  msg.sender === 'user' ? 'bg-gray-100 text-gray-800' : 'bg-white-500 text-black'
                 }`}
               >
                 {msg.message}
               </div>
               {msg.sender === 'user' && (
                 <div className="flex-shrink-0 ml-2">
-                  <FaUser className="text-green-500" size={24} />
+                  <FaUser className="text-gray-500" size={24} />
                 </div>
               )}
             </div>

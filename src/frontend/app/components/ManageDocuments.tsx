@@ -6,7 +6,6 @@ import useProjectStore from '../store/projectStore';
 import useChatStore from '../store/chatStore';
 import axios from 'axios';
 import Select from 'react-select';
-import { FaRobot, FaUser } from 'react-icons/fa';
 import { Download, Trash2 } from 'lucide-react';
 
 interface UploadedFile {
@@ -33,20 +32,27 @@ export default function ManageDocuments() {
     setSlackChannels,
     connectedSlackChannels,
     setConnectedSlackChannels,
+    selectedSource,
+    selectedProject,
+    setSelectedSource,
   } = useProjectStore();
   const { resetMessages } = useChatStore();
+  
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [selectionOptions, setSelectionOptions] = useState<SelectionOption[]>([]);
-  const [selectedSource, setSelectedSource] = useState<SelectionOption | null>(null);
-
+  const [fileContent, setFileContent] = useState<string | null>(null);
+  
   useEffect(() => {
-    fetchFiles();
-    fetchSlackChannels();
-  }, []);
+    // プロジェクトが選択されているときに、そのプロジェクトに関連するファイルとSlackチャンネルを更新
+    if (selectedProject) {
+      fetchFilesForProject(selectedProject.id);
+      fetchSlackChannels();
+    }
+  }, [selectedProject]);  // selectedProjectの変化を監視
 
-  const fetchFiles = async () => {
+  const fetchFilesForProject = async (projectId: number) => {
     try {
-      const response = await axios.get<UploadedFile[]>('http://127.0.0.1:8000/api/files/files');
+      const response = await axios.get<UploadedFile[]>(`http://127.0.0.1:8000/api/files/files/${projectId}`);
       setUploadedFiles(response.data);
       updateSelectionOptions(response.data, slackChannels);
     } catch (error) {
@@ -59,7 +65,7 @@ export default function ManageDocuments() {
     try {
       const response = await axios.get<SlackChannel[]>('http://127.0.0.1:8000/api/slack/slack-channels');
       setSlackChannels(response.data);
-      updateSelectionOptions(uploadedFiles, response.data);
+      // selectionOptionsの更新はfetchFilesForProject内で実施
     } catch (error) {
       console.error('Error fetching Slack channels:', error);
       alert('Slackチャンネルの取得に失敗しました。');
@@ -80,14 +86,29 @@ export default function ManageDocuments() {
     setSelectionOptions([...fileOptions, ...slackOptions]);
   };
 
-  const handleSourceSelect = (selectedOption: any) => {
+  const handleSourceSelect = async (selectedOption: SelectionOption | null) => {
     setSelectedSource(selectedOption);
     resetMessages(); // ソース変更時にチャット履歴をリセット
+    setFileContent(null);
+
+    // ファイルが選択された場合、その内容を取得
+    if (selectedOption?.type === 'file') {
+      try {
+        const fileResponse = await axios.get(
+          `http://127.0.0.1:8000/api/files/download-file/${selectedProject.id}/${selectedOption.value}`,
+          { responseType: 'text' }
+        );
+        setFileContent(fileResponse.data); // ファイルの内容を保存
+      } catch (error) {
+        console.error('Error fetching file content:', error);
+        alert('ファイルの内容を取得できませんでした。');
+      }
+    }
   };
 
   const handleDownloadFile = (filename: string) => {
     const link = document.createElement('a');
-    link.href = `http://127.0.0.1:8000/api/files/files/${filename}`;
+    link.href = `http://127.0.0.1:8000/api/files/download-file/${selectedProject.id}/${filename}`;
     link.download = filename;
     document.body.appendChild(link);
     link.click();
@@ -95,9 +116,10 @@ export default function ManageDocuments() {
   };
 
   const handleDeleteFile = async (filename: string) => {
+    if (!selectedProject) return;
     if (!confirm('このファイルを削除してもよろしいですか？')) return;
     try {
-      await axios.delete(`http://127.0.0.1:8000/api/files/delete-file/${filename}`);
+      await axios.delete(`http://127.0.0.1:8000/api/files/delete-file/${selectedProject.id}/${filename}`);
       setUploadedFiles(uploadedFiles.filter((file) => file.filename !== filename));
       updateSelectionOptions(uploadedFiles.filter((file) => file.filename !== filename), slackChannels);
       alert('ファイルが削除されました。');
@@ -113,19 +135,24 @@ export default function ManageDocuments() {
 
       {/* ソース選択ドロップダウン */}
       <div className="mb-4">
+      <h3 className="text-lg font-semibold mb-2">ファイルの内容確認:</h3>
         <Select
           options={selectionOptions}
           onChange={handleSourceSelect}
           placeholder="ソースを選択してください（ファイルまたはSlackチャンネル）"
           isClearable
-          value={selectedSource}
         />
       </div>
 
-      {/* 選択されたソースの表示 */}
-      {selectedSource && selectedSource.type === 'file' && (
+      {/* 選択されたソースの内容表示 */}
+      {selectedSource && selectedSource.type === 'file' && fileContent && (
         <div className="mb-4">
-          <h3 className="text-lg font-semibold">選択されたファイル: {selectedSource.label}</h3>
+          <div
+            className="p-4 bg-white rounded border overflow-y-auto"
+            style={{ maxHeight: '200px', whiteSpace: 'pre-wrap' }}
+          >
+            {fileContent}
+          </div>
         </div>
       )}
 
@@ -137,7 +164,7 @@ export default function ManageDocuments() {
 
       {/* アップロードされたファイル一覧 */}
       <div className="mt-6">
-        <h3 className="text-xl font-semibold mb-2">アップロードされたファイル</h3>
+        <h3 className="text-xl font-semibold mb-2">アップロードされたファイル一覧</h3>
         <ul className="space-y-2">
           {uploadedFiles.map((file) => (
             <li key={file.filename} className="flex justify-between items-center bg-gray-100 p-2 rounded">
@@ -145,7 +172,7 @@ export default function ManageDocuments() {
               <div className="flex space-x-2">
                 <button
                   onClick={() => handleDownloadFile(file.filename)}
-                  className="text-green-500 hover:text-green-700"
+                  className="text-[#173241] hover:text-green-700"
                 >
                   <Download className="h-5 w-5" />
                 </button>
@@ -158,28 +185,6 @@ export default function ManageDocuments() {
               </div>
             </li>
           ))}
-        </ul>
-      </div>
-
-      {/* 連携されているSlackチャンネル一覧 */}
-      <div className="mt-6">
-        <h3 className="text-xl font-semibold mb-2">連携されているSlackチャンネル</h3>
-        <ul className="space-y-2">
-          {connectedSlackChannels.map((link) => {
-            const channel = slackChannels.find((c) => c.id === link.slack_channel_id);
-            const project = projects.find((p) => p.id === link.project_id);
-            return (
-              <li key={link.project_id} className="flex justify-between items-center bg-gray-100 p-2 rounded">
-                <span>{project ? project.customer_name : 'Unknown Project'} - {channel ? channel.name : 'Unknown Channel'}</span>
-                <button
-                  onClick={() => handleDisconnectSlack(link.project_id)}
-                  className="text-red-500 hover:text-red-700"
-                >
-                  <Trash2 className="h-5 w-5" />
-                </button>
-              </li>
-            );
-          })}
         </ul>
       </div>
     </div>

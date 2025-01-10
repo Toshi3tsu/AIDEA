@@ -20,13 +20,16 @@ interface Project {
   issues: string;
   has_flow_flag: boolean;
   bpmn_xml: string;
+  solution_requirements: string;
 }
 
 interface State {
   currentStep: number;
   customerInfo: string;
   issues: string;
+  solutionRequirements: string;
   generatedFlow: string;
+  isStepComplete: boolean;
   selectedSolution: string;
   solutionOverview: string;
   solutions: Solution[];
@@ -40,6 +43,7 @@ type Action =
   | { type: 'SET_SOLUTIONS'; payload: Solution[] }
   | { type: 'SET_CUSTOMER_INFO'; payload: string }
   | { type: 'SET_ISSUES'; payload: string }
+  | { type: 'SET_SOLUTION_REQUIREMENTS'; payload: string }
   | { type: 'SET_GENERATED_FLOW'; payload: string }
   | { type: 'SET_SELECTED_SOLUTION'; payload: string }
   | { type: 'SET_SOLUTION_OVERVIEW'; payload: string }
@@ -55,7 +59,9 @@ const initialState: State = {
   currentStep: 1,
   customerInfo: '',
   issues: '',
+  solutionRequirements: '',
   generatedFlow: '',
+  isStepComplete: false,
   selectedSolution: '',
   solutionOverview: '',
   solutions: [],
@@ -73,6 +79,8 @@ function reducer(state: State, action: Action): State {
       return { ...state, customerInfo: action.payload };
     case 'SET_ISSUES':
       return { ...state, issues: action.payload };
+    case 'SET_SOLUTION_REQUIREMENTS':
+      return { ...state, solutionRequirements: action.payload };
     case 'SET_GENERATED_FLOW':
       return { ...state, generatedFlow: action.payload };
     case 'SET_SELECTED_SOLUTION':
@@ -100,31 +108,32 @@ function reducer(state: State, action: Action): State {
 
 export default function Generate() {
   const [state, dispatch] = useReducer(reducer, initialState);
-  const { projectId } = useParams();
-  const { setGeneratedFlow } = useFlowStore();
+  const { generatedFlow, setGeneratedFlow } = useFlowStore();
+  const [projects, setProjects] = useState<Project[]>([]);
+  const { selectedProject, setSelectedProject } = useProjectStore();
+  const [loadingProjects, setLoadingProjects] = useState<boolean>(true);
 
   useEffect(() => {
-    if (projectId) {
-      fetchProjectDetails(projectId);
+    if (selectedProject) {
+      dispatch({ type: 'SET_CUSTOMER_INFO', payload: selectedProject.customer_name });
+      dispatch({ type: 'SET_ISSUES', payload: selectedProject.issues });
+      dispatch({ type: 'SET_GENERATED_FLOW', payload: selectedProject.bpmn_xml });
+      dispatch({ type: 'SET_SOLUTION_REQUIREMENTS', payload: selectedProject.solution_requirements || '' });
+      setGeneratedFlow(selectedProject.bpmn_xml);
       fetchSolutions();
     }
-  }, [projectId]);
+  }, [selectedProject]);
 
-  const fetchProjectDetails = async (id: string) => {
+  const fetchProjects = async () => {
+    setLoadingProjects(true);
     try {
-      const response = await axios.get<Project>(`http://127.0.0.1:8000/api/projects`);
-      const project = response.data.find((p) => p.id === parseInt(id));
-      if (project) {
-        dispatch({ type: 'SET_CUSTOMER_INFO', payload: project.customer_name });
-        dispatch({ type: 'SET_ISSUES', payload: project.issues });
-        dispatch({ type: 'SET_GENERATED_FLOW', payload: project.bpmn_xml });
-        setGeneratedFlow(project.bpmn_xml);
-      } else {
-        alert('プロジェクトが見つかりません。');
-      }
+      const response = await axios.get<Project[]>('http://127.0.0.1:8000/api/projects');
+      setProjects(response.data);
     } catch (error) {
-      console.error('Error fetching project details:', error);
-      alert('プロジェクトの詳細取得に失敗しました。');
+      console.error('Error fetching projects:', error);
+      alert('プロジェクトの取得に失敗しました。');
+    } finally {
+      setLoadingProjects(false);
     }
   };
 
@@ -138,11 +147,37 @@ export default function Generate() {
     }
   };
 
-  const setSolutions = (solutions: Solution[]) => {
-    dispatch({ type: 'SET_SOLUTIONS', payload: solutions });
+  const handleProjectSelect = (project: Project) => {
+    setSelectedProject(project);
+    dispatch({ type: 'SET_CUSTOMER_INFO', payload: project.customer_name });
+    dispatch({ type: 'SET_ISSUES', payload: project.issues });
+    dispatch({ type: 'SET_GENERATED_FLOW', payload: project.bpmn_xml });
+    setGeneratedFlow(project.bpmn_xml);
+  };
+
+  const handleGenerateRequirements = async () => {
+    dispatch({ type: 'SET_LOADING', payload: true });
+    try {
+      const response = await axios.post('http://127.0.0.1:8000/ai/generate-requirements', {
+        customer_info: state.customerInfo,
+        issues: state.issues,
+      });
+      // 生成された要件テキストを保存
+      dispatch({ type: 'SET_SOLUTION_REQUIREMENTS', payload: response.data.response });
+    } catch (error) {
+      console.error('Error generating requirements:', error);
+      alert('ソリューション要件の生成に失敗しました。');
+    } finally {
+      dispatch({ type: 'SET_LOADING', payload: false });
+    }
   };
 
   const handleGenerateFlow = async () => {
+    if (!selectedProject) {
+      alert('プロジェクトを選択してください。');
+      return;
+    }
+
     dispatch({ type: 'SET_LOADING', payload: true });
     try {
       const response = await axios.post('http://127.0.0.1:8000/api/ai/generate-flow', { 
@@ -153,10 +188,12 @@ export default function Generate() {
       dispatch({ type: 'SET_GENERATED_FLOW', payload: cleanedFlow });
       setGeneratedFlow(cleanedFlow);
       // バックエンドにフローを保存
-      await axios.put(`http://127.0.0.1:8000/api/projects/${projectId}/flow`, {
+      await axios.put(`http://127.0.0.1:8000/api/projects/${selectedProject.id}/flow`, {
         bpmn_xml: cleanedFlow,
       });
       alert('業務フローが生成されました。');
+      // プロジェクトのフラグを更新
+      fetchProjects();
     } catch (error) {
       console.error('Error generating BPMN:', error);
       alert('BPMNの生成に失敗しました。');
@@ -177,6 +214,11 @@ export default function Generate() {
   };
 
   const handleGenerateProposal = async () => {
+    if (!selectedProject) {
+      alert('プロジェクトを選択してください。');
+      return;
+    }
+
     dispatch({ type: 'SET_LOADING', payload: true });
     try {
       const response = await axios.post('http://127.0.0.1:8000/api/proposals', {
@@ -197,6 +239,11 @@ export default function Generate() {
   };
 
   const handleEvaluateSolutions = async () => {
+    if (!selectedProject) {
+      alert('プロジェクトを選択してください。');
+      return;
+    }
+
     dispatch({ type: 'SET_LOADING', payload: true });
     try {
       const response = await axios.post('http://127.0.0.1:8000/api/ai/evaluate-solutions', {
@@ -215,6 +262,8 @@ export default function Generate() {
   const handleReset = () => {
     dispatch({ type: 'RESET' });
     useFlowStore.getState().resetFlow();
+    setSelectedProject(null);
+    fetchProjects();
   };
 
   const renderStep = () => {
@@ -226,7 +275,9 @@ export default function Generate() {
             setCustomerInfo={(val) => dispatch({ type: 'SET_CUSTOMER_INFO', payload: val })}
             issues={state.issues}
             setIssues={(val) => dispatch({ type: 'SET_ISSUES', payload: val })}
+            generatedFlow={state.generatedFlow}
             handleGenerateFlow={handleGenerateFlow}
+            handleGenerateRequirements={handleGenerateRequirements}
             loading={state.loading}
             nextStep={() => dispatch({ type: 'NEXT_STEP' })}
           />
@@ -245,15 +296,15 @@ export default function Generate() {
       case 3:
         return (
           <Step3
-            evaluation={state.evaluation}
-            setEvaluation={(val) => dispatch({ type: 'SET_EVALUATION', payload: val })}
-            combination={state.combination}
-            setCombination={(val) => dispatch({ type: 'SET_COMBINATION', payload: val })}
-            handleEvaluate={handleEvaluateSolutions}
-            handleGenerateProposal={handleGenerateProposal}
-            loading={state.loading}
-            nextStep={() => dispatch({ type: 'NEXT_STEP' })}
-            prevStep={() => dispatch({ type: 'PREV_STEP' })}
+          evaluation={state.evaluation}
+          setEvaluation={(val) => dispatch({ type: 'SET_EVALUATION', payload: val })}
+          combination={state.combination}
+          setCombination={(val) => dispatch({ type: 'SET_COMBINATION', payload: val })}
+          handleEvaluate={handleEvaluateSolutions}
+          handleGenerateProposal={handleGenerateProposal}
+          loading={state.loading}
+          nextStep={() => dispatch({ type: 'NEXT_STEP' })}
+          prevStep={() => dispatch({ type: 'PREV_STEP' })}
           />
         );
       case 4:
@@ -270,34 +321,57 @@ export default function Generate() {
   };
 
   return (
-    <div className="space-y-6 p-6">
-      <h1 className="text-2xl font-bold">業務コンサルエージェント</h1>
-
-      {/* プロジェクト選択ドロップダウン */}
-      <div className="mb-6">
-        <label className="block text-gray-700 mb-2">プロジェクト選択:</label>
-        <select
-          value={selectedProjectId ?? ''}
-          onChange={handleProjectChange}
-          className="w-full p-2 border rounded"
-        >
-          <option value="">プロジェクトを選択してください</option>
-          {projects.map((project) => (
-            <option key={project.id} value={project.id}>
-              {project.customer_name} - {project.issues.substring(0, 30)}...
-            </option>
-          ))}
-        </select>
+    <div className="p-6 bg-gray-50 min-h-screen">
+      {/* タイトルとプロジェクト選択 */}
+      <div className="flex justify-between items-center mb-2">
+        <h1 className="text-3xl font-bold text-gray-800">業務改善AI</h1>
       </div>
 
-      {/* ステップフォーム */}
-      {selectedProjectId && renderStep()}
+      {selectedProject && renderStep()}
 
-      {/* 業務フロー表示 */}
-      {state.generatedFlow && (
+      {selectedProject && state.solutionRequirements && (
         <div className="mt-6">
-          <h2 className="text-xl font-semibold mb-4">生成された業務フロー図</h2>
-          <BpmnViewer xml={state.generatedFlow} projectId={selectedProjectId} />
+          <div className="flex items-center mb-4">
+            <img
+              src="/icon.png"
+              alt="コンサルタントアイコン"
+              className="h-10 w-10 rounded-full ml-6 mr-3"
+            />
+            <div className="bg-blue-100 text-blue-800 px-4 py-2 rounded-lg shadow">
+              ソリューション要件の候補は以下です。
+            </div>
+          </div>
+          <div className="mt-6 p-4 bg-yellow-100 rounded-lg shadow">
+            {state.solutionRequirements
+              .split('\n')
+              .filter(req => req.trim() !== '')
+              .map((req, idx) => (
+                <div key={idx} className="flex items-center mb-2">
+                  <input type="checkbox" id={`requirement-${idx}`} className="mr-2" />
+                  <label htmlFor={`requirement-${idx}`} className="text-gray-800">{req}</label>
+                </div>
+              ))
+            }
+          </div>
+        </div>
+      )}
+
+      {selectedProject && state.generatedFlow && (
+        <div className="mt-6">
+          {/* 吹き出しとアイコン */}
+          <div className="flex items-center mb-4">
+            <img
+              src="/icon.png"
+              alt="コンサルタントアイコン"
+              className="h-10 w-10 rounded-full ml-6 mr-3"
+            />
+            <div className="bg-blue-100 text-blue-800 px-4 py-2 rounded-lg shadow">
+              作成した業務フローは以下です。
+            </div>
+          </div>
+
+          {/* 業務フロー表示 */}
+          <BpmnViewer xml={state.generatedFlow} projectId={selectedProject.id.toString()} />
         </div>
       )}
     </div>
@@ -325,39 +399,70 @@ const Step1 = ({
   loading,
   nextStep,
 }: Step1Props) => {
+  useEffect(() => {
+    // 初期テンプレートを設定
+    setCustomerInfo('倉庫会社');
+    setIssues('パレットの規格の違いや人手不足等もあり、荷下ろしに時間がかかっているため、物流のボトルネックになっている。そのため、荷下ろしの待機列が発生し、時間短縮のために作業にドライバーが駆り出されることになり、負担がかかっている。');
+  }, []); // 依存配列に setter を入れる
+
   return (
     <div className="bg-white p-6 rounded-lg shadow">
-      <h2 className="text-xl font-semibold mb-4">ステップ1: 顧客情報と課題の入力</h2>
+      <h2 className="text-xl font-semibold mb-4">ステップ1: 課題の明確化</h2>
+      <div className="flex items-center mt-6">
+        <img
+          src="/icon.png"
+          alt="コンサルタントアイコン"
+          className="h-10 w-10 rounded-full mr-3 mb-4"
+        />
+        <div className="bg-[#CB6CE6]-100 text-blue-800 px-4 py-2 rounded-lg shadow mb-4">
+          課題に関する情報を教えてください。
+        </div>
+      </div>
       <textarea
         className="w-full p-2 border rounded mb-4"
-        placeholder="顧客情報を入力してください"
+        placeholder="組織・顧客情報を入力してください"
         value={customerInfo}
         onChange={(e) => setCustomerInfo(e.target.value)}
-        rows={2}
+        rows={1}
       />
       <textarea
-        className="w-full p-2 border rounded mb-4"
+        className="w-full p-2 border rounded mb-2"
         placeholder="課題を入力してください"
         value={issues}
         onChange={(e) => setIssues(e.target.value)}
-        rows={4}
+        rows={3}
       />
-      <button
-        onClick={handleGenerateFlow}
-        className="px-4 py-2 bg-blue-500 text-white rounded"
-        disabled={!customerInfo || !issues || loading}
-      >
-        {loading ? '生成中...' : '業務フローを生成'}
-      </button>
-      <div className="flex justify-end mt-4">
-        <button
-          onClick={nextStep}
-          className="px-4 py-2 bg-green-500 text-white rounded"
-          disabled={!customerInfo || !issues}
-        >
-          次へ
-        </button>
+      <div className="flex items-center mt-2">
+        <div className="flex justify-center flex-1">
+          <button
+            onClick={handleGenerateFlow}
+            className="px-4 py-2 bg-[#CB6CE6] text-white rounded hover:bg-[#D69292] disabled:opacity-50"
+            disabled={!customerInfo || !issues || loading}
+          >
+            {loading ? '生成中...' : '業務フロー生成'}
+          </button>
+        </div>
+        <div className="flex justify-end">
+          <button
+            onClick={nextStep}
+            className="px-4 py-2 bg-[#BF4242] text-white rounded hover:bg-[#76878F] disabled:opacity-50"
+            disabled={!generatedFlow}
+          >
+            次へ
+          </button>
+        </div>
       </div>
+      {/* {generatedFlow && (
+        <div className="mt-4">
+        <h3 className="text-lg font-medium mb-2">生成された業務フロー:</h3>
+        <textarea
+          className="w-full p-2 border rounded mt-2"
+          value={generatedFlow}
+          readOnly
+          rows={3}
+        />
+      </div>
+    )} */}
     </div>
   );
 };

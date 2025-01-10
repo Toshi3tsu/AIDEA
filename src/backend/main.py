@@ -1,7 +1,7 @@
 # src/backend/main.py
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from api import proposals, solutions, ai, project_tasks, projects, chat, slack, files
+from api import proposals, solutions, ai, project_tasks, projects, chat, slack, files, notes
 from dotenv import load_dotenv
 
 # .env ファイルの読み込み
@@ -27,6 +27,7 @@ app.include_router(projects.router, prefix="/api/projects")
 app.include_router(chat.router, prefix="/api/chat", tags=["Chat"])
 app.include_router(slack.router, prefix="/api/slack", tags=["Slack"])
 app.include_router(files.router, prefix="/api/files", tags=["Files"])
+app.include_router(notes.router, prefix="/api/notes", tags=["notes"])
 
 @app.get("/")
 def root():

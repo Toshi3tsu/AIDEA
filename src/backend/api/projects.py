@@ -17,6 +17,7 @@ class Project(BaseModel):
     issues: str
     has_flow_flag: bool
     bpmn_xml: str = ""
+    solution_requirements: str = ""
 
 class ProjectCreate(BaseModel):
     customer_name: str
@@ -29,14 +30,18 @@ class ProjectUpdate(BaseModel):
 class FlowUpdate(BaseModel):
     bpmn_xml: str
 
+class RequirementsUpdate(BaseModel):
+    solution_requirements: str
+
 # プロジェクトCSVの読み込み
 def read_projects() -> pd.DataFrame:
     if not os.path.exists(PROJECTS_CSV):
-        df = pd.DataFrame(columns=['id', 'customer_name', 'issues', 'has_flow_flag', 'bpmn_xml'])
+        df = pd.DataFrame(columns=['id', 'customer_name', 'issues', 'has_flow_flag', 'bpmn_xml', 'solution_requirements'])
         df.to_csv(PROJECTS_CSV, index=False)
-    df = pd.read_csv(PROJECTS_CSV, dtype={'id': int, 'customer_name': str, 'issues': str, 'has_flow_flag': bool, 'bpmn_xml': str})
+    df = pd.read_csv(PROJECTS_CSV, dtype={'id': int, 'customer_name': str, 'issues': str, 'has_flow_flag': bool, 'bpmn_xml': str, 'solution_requirements': str})
     # NaNを空文字列に置き換える
     df['bpmn_xml'] = df['bpmn_xml'].fillna('')
+    df['solution_requirements'] = df['solution_requirements'].fillna('')
     return df
 
 # プロジェクトCSVへの書き込み
@@ -60,7 +65,8 @@ async def create_project(project: ProjectCreate):
         'customer_name': project.customer_name,
         'issues': project.issues,
         'has_flow_flag': False,
-        'bpmn_xml': ""
+        'bpmn_xml': "",
+        'solution_requirements': ""
     }
     new_row = pd.DataFrame([new_project])
     df = pd.concat([df, new_row], ignore_index=True)
@@ -92,6 +98,18 @@ async def update_flow(project_id: int = Path(..., gt=0), flow: FlowUpdate = None
     if flow.bpmn_xml:
         df.at[index, 'bpmn_xml'] = flow.bpmn_xml
         df.at[index, 'has_flow_flag'] = True
+    write_projects(df)
+    updated_project = df.loc[index].to_dict()
+    return updated_project
+
+@router.put("/{project_id}/requirements", response_model=Project)
+async def update_requirements(project_id: int = Path(..., gt=0), req_update: RequirementsUpdate = None):
+    df = read_projects()
+    if project_id not in df['id'].values:
+        raise HTTPException(status_code=404, detail="Project not found")
+    index = df.index[df['id'] == project_id].tolist()[0]
+    if req_update and req_update.solution_requirements is not None:
+        df.at[index, 'solution_requirements'] = req_update.solution_requirements
     write_projects(df)
     updated_project = df.loc[index].to_dict()
     return updated_project

@@ -3,7 +3,6 @@
 
 import { useState, useEffect } from 'react';
 import { Upload, Edit2, Trash2, Search, Download } from 'lucide-react';
-import BpmnViewer from '../generate/BpmnViewer';
 import useFlowStore from '../store/flowStore';
 import useProjectStore from '../store/projectStore';
 import axios from 'axios';
@@ -256,7 +255,7 @@ export default function Settings() {
 
       {/* プロジェクトとSlackチャンネルの連携テーブル */}
       <div className="bg-white p-6 rounded-lg shadow mb-6">
-        <h2 className="text-xl font-semibold mb-4">プロジェクトとSlackチャンネルの連携</h2>
+        <h2 className="text-xl font-semibold mb-4">ファイル管理・API連携</h2>
         <table className="w-full border-collapse">
           <thead className="bg-gray-100">
             <tr>
@@ -303,7 +302,7 @@ export default function Settings() {
                                   <div className="flex space-x-1">
                                     <button
                                       onClick={() => handleDownloadFile(project.id, file.filename)}
-                                      className="text-green-500 hover:text-green-700"
+                                      className="text-[#173241] hover:text-green-700"
                                       title="ダウンロード"
                                     >
                                       <Download className="h-4 w-4" />
@@ -370,31 +369,21 @@ export default function Settings() {
         </table>
       </div>
 
-      {/* BPMN Viewer Section
-      <div className="bg-white p-6 rounded-lg shadow mb-6">
-        <h2 className="text-xl font-semibold mb-4">保存された業務フロー</h2>
-        {generatedFlow ? (
-          <BpmnViewer xml={generatedFlow} />
-        ) : (
-          <p className="text-gray-500">現在保存されている業務フローはありません。</p>
-        )}
-      </div> */}
-
       {/* Upload Section */}
       <div className="bg-white p-6 rounded-lg shadow mb-6">
-        <h2 className="text-xl font-semibold mb-4">ソリューションデータのアップロード</h2>
+        <h2 className="text-xl font-semibold mb-4">ソリューション管理</h2>
         <div className="flex items-center space-x-4">
-          <label className="cursor-pointer bg-[#173241] text-white px-4 py-2 rounded flex items-center hover:bg-[#D69292]">
+          <label className="cursor-pointer bg-[#CB6CE6] text-white px-4 py-2 rounded flex items-center hover:bg-[#D69292]">
             <Upload className="mr-2" />
             ファイルを選択
             <input
               type="file"
               className="hidden"
               onChange={handleFileUpload}
-              accept=".csv,.xlsx"
+              accept=".txt,.docx"
             />
           </label>
-          <span className="text-sm text-gray-600">対応フォーマット: CSV, Excel</span>
+          <span className="text-sm text-gray-600">対応フォーマット: Text, Word</span>
         </div>
         {uploadProgress > 0 && (
           <div className="mt-4">

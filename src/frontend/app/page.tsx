@@ -88,8 +88,8 @@ export default function Dashboard() {
         <table className="w-full table-auto border-collapse">
           <thead>
             <tr className="bg-gray-100 border-b">
-              <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">顧客名</th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">課題</th>
+              <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">業種業態・担当部署</th>
+              <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">目的・タスク/課題</th>
               <th className="px-4 py-3 text-center text-sm font-medium text-gray-700">業務フロー</th>
               <th className="px-4 py-3 text-center text-sm font-medium text-gray-700">アクション</th>
             </tr>

@@ -5,11 +5,31 @@ from openai import OpenAI
 from dotenv import load_dotenv
 import logging
 import json
+import httpx
+from langsmith.wrappers import wrap_openai
+from langsmith import traceable
 
 load_dotenv()
 
-client = OpenAI(api_key = os.getenv("OPENAI_API_KEY"))
+# ログの設定
+logging.basicConfig(level=logging.DEBUG)
 
+# カスタム証明書のパス（自己署名証明書を指定）
+CUSTOM_CERT_PATH = "C:\\Users\\toshimitsu_fujiki\\Cato Networks CA.crt"
+
+# httpxクライアントを構築
+httpx_client = httpx.Client(
+    verify=CUSTOM_CERT_PATH  # 自己署名証明書を指定
+)
+
+# OpenAIクライアントにカスタムhttpxクライアントを渡す
+api_key = os.getenv("OPENAI_API_KEY")
+if not api_key:
+    raise ValueError("APIキーが設定されていません。")
+
+client = wrap_openai(OpenAI(api_key=api_key, http_client=httpx_client))
+
+@traceable
 def generate_bpmn_flow(customer_info: str, issues: str) -> str:
     """
     顧客情報と課題に基づいて、BPMN XML形式の業務フローを生成します。
@@ -140,6 +160,72 @@ def analyze_business_flow(business_flow: str, issues: str) -> str:
         suggestions = response.choices[0].message.content.strip()
         return suggestions
     except Exception as e:
+        raise RuntimeError(f"AI APIエラー: {str(e)}")
+
+@traceable
+def generate_requirements(customer_info: str, issues: str) -> list:
+    """
+    顧客情報と課題に基づいて、ソリューションに必要な機能要件を生成します。
+    機能要件はリスト形式で返されます。
+    """
+    prompt = f"""
+    以下の顧客情報と課題に基づいて、ソリューションの必要な極最低限の機能要件をリスト形式で生成してください。
+    機能要件とは、具体的なソリューションではなく、「～を～できる」といった能力や性質のことです。
+
+    顧客情報:
+    {customer_info}
+
+    課題:
+    {issues}
+
+    機能要件を箇条書き形式でリストアップしてください。
+    """
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "あなたは優秀な業務・ITコンサルタントです。付加価値労働生産性の向上を目的に、ソリューションの導入を行い、業務を改善します。"},
+                {"role": "user", "content": prompt}
+            ],
+            functions=[
+                {
+                    "name": "generate_requirements_list",
+                    "description": "要件のリストを生成します。",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "requirements": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": "生成された要件を含むリスト"
+                            }
+                        },
+                        "required": ["requirements"]
+                    }
+                }
+            ],
+            function_call={"name": "generate_requirements_list"},
+            max_tokens=1000,
+            temperature=0,
+        )
+
+        # Structured Output解析
+        function_call = response.choices[0].message.function_call
+        arguments = function_call.arguments
+
+        # JSONパース
+        parsed_arguments = json.loads(arguments)
+        requirements = parsed_arguments.get("requirements", [])
+
+        if not requirements:
+            raise ValueError("要件が生成されませんでした。")
+
+        logging.info("要件が正常に生成されました。")
+        requirements = "\n".join(requirements)
+        return requirements
+
+    except Exception as e:
+        logging.error(f"OpenAI APIエラー: {str(e)}", exc_info=True)
         raise RuntimeError(f"AI APIエラー: {str(e)}")
 
 def evaluate_solutions(evaluation: str) -> str:
