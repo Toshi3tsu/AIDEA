@@ -1,8 +1,8 @@
-# sAIteki: Business Flow Visualizer and Solution Optimizer
+# AIDEA: AI-Driven Enterprise Assistant
 
 ## Overview
 
-sAIteki is a tool designed to visualize business workflows, identify bottlenecks, and generate optimized solution proposals by integrating stakeholder data and leveraging AI-powered suggestions. The application consists of a frontend built with Next.js and Tailwind CSS, and a backend implemented with FastAPI. Data is currently stored in CSV files for simplicity during the Proof of Concept (PoC) phase.
+AIDEA is a tool designed to visualize business workflows, identify bottlenecks, and generate optimized solution proposals by integrating stakeholder data and leveraging AI-powered suggestions. The application consists of a frontend built with Next.js and Tailwind CSS, and a backend implemented with FastAPI. Data is currently stored in CSV files for simplicity during the Proof of Concept (PoC) phase.
 
 ## Features
 
