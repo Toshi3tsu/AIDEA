@@ -3,19 +3,42 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Home, Settings, PlusCircle, Save, FileText } from 'lucide-react'
+import Select from 'react-select';
+import useProjectStore from '../store/projectStore';
+import axios from 'axios';
 
 export default function Sidebar() {
   const pathname = usePathname()
   const defaultApiKey = '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'
   const [apiKey, setApiKey] = useState(defaultApiKey)
+  const { projects, selectedProject, setProjects, setSelectedProject } = useProjectStore();
+
+  useEffect(() => {
+    fetchProjects();
+  }, []);
 
   // APIキーを保存
   const handleSaveApiKey = () => {
     localStorage.setItem('apiKey', apiKey)
     alert('APIキーが保存されました！')
   }
+
+  const fetchProjects = async () => {
+    try {
+      const response = await axios.get<Project[]>('http://127.0.0.1:8000/api/projects');
+      setProjects(response.data);
+    } catch (error) {
+      console.error('Error fetching projects:', error);
+      alert('プロジェクトの取得に失敗しました。');
+    }
+  };
+
+  const handleProjectSelect = (selectedOption: any) => {
+    const project = projects.find((p) => p.id === selectedOption?.value);
+    setSelectedProject(project || null);
+  };
 
   const isActive = (path: string) => pathname === path
 
@@ -53,13 +76,38 @@ export default function Sidebar() {
           設定
         </Link>
         <hr className="my-4 border-gray-300" />
-        <Link href="/product-management" className={`flex items-center px-4 py-2 mt-2 text-gray-700 ${isActive('/product-management') ? 'bg-gray-200 font-bold' : ''}`}
+        {/* プロジェクト選択 */}
+        <div className="px-4">
+          <h3 className="text-md font-semibold mb-2">プロジェクト選択</h3>
+          <Select
+            options={projects.map((project) => ({
+              value: project.id,
+              label: `${project.customer_name}`,/* - ${project.issues.substring(0, 30)}${project.issues.length > 30 ? '...' : ''}*/
+            }))}
+            onChange={handleProjectSelect}
+            placeholder="プロジェクトを選択してください"
+            isClearable
+            value={
+              selectedProject
+                ? {
+                    value: selectedProject.id,
+                    label: `${selectedProject.customer_name} - ${selectedProject.issues.substring(0, 30)}${selectedProject.issues.length > 30 ? '...' : ''}`,
+                  }
+                : null
+            }
+          />
+        </div>
+      </nav>
+
+      <div className="px-4 py-4 border-t">
+        <Link href="/product-management" className={`flex items-center px-4 py-2 mt-4 text-gray-700 ${isActive('/product-management') ? 'bg-gray-200 font-bold' : ''}`}
           aria-current={isActive('/product-management') ? 'page' : undefined}
         >
           <FileText className="mr-3 h-5 w-5" />
           プロダクト管理
         </Link>
-      </nav>
+      </div>
+
       <div className="px-4 py-4 border-t">
         <input
           type="password"
@@ -77,5 +125,5 @@ export default function Sidebar() {
         </button>
       </div>
     </div>
-  )
+  );
 }

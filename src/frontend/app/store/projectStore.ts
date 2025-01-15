@@ -25,13 +25,23 @@ interface UploadedFile {
   project_id: number;
 }
 
+interface SelectionOption {
+  value: string;
+  label: string;
+  type: 'file' | 'slack';
+}
+
 interface ProjectState {
   projects: Project[];
   selectedProject: Project | null;
   slackChannels: SlackChannel[];
   connectedSlackChannels: ProjectSlackLink[];
   selectedSource: SelectionOption | null;
-  projectFiles: { [key: number]: UploadedFile[] }; // プロジェクトIDごとのファイルリスト
+  projectFiles: { [key: number]: UploadedFile[] };
+  sessionTitles: string[];
+  setSessionTitles: (titles: string[]) => void;
+  selectedSession: string | null;
+  setSelectedSession: (session: string) => void;
   setProjects: (projects: Project[]) => void;
   setSelectedProject: (project: Project | null) => void;
   setSlackChannels: (channels: SlackChannel[]) => void;
@@ -47,6 +57,10 @@ const useProjectStore = create<ProjectState>((set) => ({
   connectedSlackChannels: [],
   selectedSource: null,
   projectFiles: {},
+  sessionTitles: [],
+  setSessionTitles: (titles) => set({ sessionTitles: titles }),
+  selectedSession: null,
+  setSelectedSession: (session) => set({ selectedSession: session }),
   setProjects: (projects) => set({ projects }),
   setSelectedProject: (project) => set({ selectedProject: project }),
   setSlackChannels: (channels) => set({ slackChannels: channels }),

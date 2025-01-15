@@ -44,7 +44,7 @@ def write_files(files: list):
 # グローバルリストをCSVデータで初期化
 project_files = read_files()
 
-UPLOAD_DIRECTORY = "../../../data/uploads/"
+UPLOAD_DIRECTORY = "../../data/uploads/"
 
 # ディレクトリが存在しない場合は作成
 if not os.path.exists(UPLOAD_DIRECTORY):

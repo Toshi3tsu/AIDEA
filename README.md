@@ -57,6 +57,7 @@ project_root/
 │   │   ├── __init__.py
 │   │   ├── ai.py
 │   │   ├── chat.py
+│   │   ├── chat_history.py
 │   │   ├── files.py
 │   │   ├── project_tasks.py
 │   │   ├── projects.py
@@ -69,8 +70,11 @@ project_root/
 │   └── requirements.txt
 │
 ├── data/
-│   ├── proposal.csv
+│   ├── uploads/
+│   ├── chat_history.csv
 │   ├── solutions.csv
+│   ├── files.csv
+│   ├── notes.csv
 │   └── projects.csv
 │
 └── README.md             # Project documentation
@@ -177,6 +181,11 @@ Access the backend at `http://localhost:8000`.
 
 This project is licensed under the [MIT License](LICENSE).
 
+Additionally, this project utilizes the following third-party software:
+
+- [cameltech/japanese-gpt-1b-PII-masking](https://huggingface.co/cameltech/japanese-gpt-1b-PII-masking) licensed under the MIT License.
+- [BPMN.io](https://bpmn.io/) by Camunda Services GmbH, licensed under its [MIT License](https://github.com/bpmn-io/bpmn-js/blob/develop/LICENSE). The BPMN.io watermark is displayed in all rendered diagrams as required by the license.
+
 ---
 
 ## Acknowledgments
@@ -185,3 +194,5 @@ This project is licensed under the [MIT License](LICENSE).
 - [Tailwind CSS](https://tailwindcss.com/)
 - [FastAPI](https://fastapi.tiangolo.com/)
 - [OpenAI](https://openai.com/)
+- ["cameltech/japanese-gpt-1b-PII-masking"](https://huggingface.co/cameltech/japanese-gpt-1b-PII-masking)
+- [BPMN.io](https://bpmn.io/) by Camunda Services GmbH - used for BPMN diagram modeling and rendering.

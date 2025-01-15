@@ -1,23 +1,39 @@
 // src/frontend/app/components/Chat.tsx
 'use client';
 
-import React, { useState, FormEvent } from 'react';
+import React, { useState, useEffect, FormEvent } from 'react';
 import useChatStore from '../store/chatStore';
 import useProjectStore from '../store/projectStore';
 import axios from 'axios';
 import ScrollableFeed from 'react-scrollable-feed';
 import { FaRobot, FaUser } from 'react-icons/fa';
+import ReactMarkdown from 'react-markdown';
 import { Send } from 'lucide-react';
 
 export default function Chat() {
   const { messages, addMessage, resetMessages } = useChatStore();
   const { selectedProject, slackChannels } = useProjectStore();
+  const { selectedSource } = useProjectStore();
   const [inputMessage, setInputMessage] = useState<string>('');
+  const [sessionTitle, setSessionTitle] = useState<string>('');
+  const { selectedSession, setSelectedSession } = useProjectStore();
+  const [sessionTitleInput, setSessionTitleInput] = useState<string>(selectedSession || '');
   const [sending, setSending] = useState<boolean>(false);
+
+  useEffect(() => {
+    setSessionTitleInput(selectedSession || '');
+  }, [selectedSession]);
 
   const handleSendMessage = async (e: FormEvent) => {
     e.preventDefault();
     if (!inputMessage.trim()) return;
+
+    // 最初のメッセージが送信されるタイミングでセッションタイトルが未設定なら設定
+    if (!selectedSession && !sessionTitleInput) {
+      const inferredTitle = inputMessage.trim().slice(0, 50);
+      setSessionTitleInput(inferredTitle);
+      setSelectedSession(inferredTitle);
+    }
 
     // ユーザーのメッセージを追加
     addMessage({ sender: 'user', message: inputMessage });
@@ -32,22 +48,24 @@ export default function Chat() {
         source_id: null,
       };
 
-      if (selectedProject) {
-        // 連携されているSlackチャンネルがある場合
-        const linkedSlack = slackChannels.find((channel) =>
-          channel.id === selectedProject.id.toString()
-        );
-        if (linkedSlack) {
-          chatRequest.source_type = 'slack';
-          chatRequest.source_id = linkedSlack.id;
-        }
+      // selectedSource が設定されている場合、その情報を使用
+      const { selectedSource } = useProjectStore.getState();
+      if (selectedSource) {
+        chatRequest.source_type = selectedSource.type;
+        chatRequest.source_id = selectedSource.value;
       }
 
       // チャットAPIへのリクエスト
       const response = await axios.post('http://127.0.0.1:8000/api/chat/chat', chatRequest);
 
-      // AIの応答を追加
       addMessage({ sender: 'ai', message: response.data.response });
+
+      // セッションタイトルを決定
+      const effectiveSessionTitle = selectedSession || sessionTitleInput || `Session_${selectedProject?.id}_${new Date().toISOString()}`;
+
+      // チャット履歴を保存
+      await saveChatHistory(effectiveSessionTitle);
+
     } catch (error) {
       console.error('Error sending message:', error);
       addMessage({ sender: 'ai', message: '申し訳ありません。エラーが発生しました。' });
@@ -56,37 +74,79 @@ export default function Chat() {
     }
   };
 
+  const saveChatHistory = async (sessionTitle: string) => {
+    if (!selectedProject) {
+      console.warn('選択されたプロジェクトがありません。');
+      return;
+    }
+
+    // 現在の全メッセージを取得
+    const currentMessages = messages.map(msg => ({
+      sender: msg.sender,
+      message: msg.message,
+      timestamp: new Date().toISOString()  // タイムスタンプを追加
+    }));
+
+    console.log("Request to save chat history:", {
+      project_id: selectedProject?.id,
+      session_title: sessionTitle,
+      messages: currentMessages,
+    });
+
+    try {
+      await axios.post('http://127.0.0.1:8000/api/chat_history/save', {
+        project_id: selectedProject?.id,
+        session_title: sessionTitle,
+        messages: currentMessages
+      });
+      console.log('チャット履歴が保存されました。');
+    } catch (error) {
+      console.error('Error saving chat history:', error);
+      // 保存失敗時のエラーハンドリング（必要に応じて通知）
+    }
+  };
+
   return (
     <div className="flex flex-col h-full">
-      <h2 className="text-2xl font-bold mb-4">AIチャット</h2>
+      <h2 className="text-2xl font-bold mb-4">生成AIチャット</h2>
+      <div className="mb-4">
+        <label className="block text-sm font-semibold mb-1">セッション名</label>
+        <input
+          type="text"
+          value={sessionTitleInput}
+          onChange={(e) => {
+            setSessionTitleInput(e.target.value);
+            setSelectedSession(e.target.value);  // 入力と同時にストアに反映
+          }}
+          placeholder="セッション名を入力してください..."
+          className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+        />
+      </div>
 
       {/* チャットメッセージ表示 */}
-      <div className="flex-1 overflow-y-auto mb-4 bg-white p-4 rounded shadow">
+      <div className="flex-1 bg-white p-4 rounded shadow" style={{overflowY: 'auto', height: 'calc(100% - 0.2rem)'}}>
         <ScrollableFeed>
           {messages.map((msg, index) => (
             <div
               key={index}
-              className={`flex mb-2 ${
-                msg.sender === 'user' ? 'justify-end' : 'justify-start'
-              }`}
+              className={`flex mb-2 mr-2 ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}
             >
               {msg.sender === 'ai' && (
-                <div className="flex-shrink-0 mr-2">
+                <div className="flex-shrink-0">
                   <FaRobot className="text-[#CB6CE6]" size={24} />
                 </div>
               )}
               <div
-                className={`max-w-xs rounded-lg px-4 py-2 ${
-                  msg.sender === 'user' ? 'bg-gray-100 text-gray-800' : 'bg-white-500 text-black'
+                className={`w-[70%] max-w-[70%] rounded-lg px-4 py-2 ${
+                  msg.sender === 'user' ? 'bg-gray-100 text-gray-800' : 'bg-white text-black'
                 }`}
               >
-                {msg.message}
+                {msg.sender === 'ai' ? (
+                  <ReactMarkdown>{msg.message}</ReactMarkdown>
+                ) : (
+                  msg.message
+                )}
               </div>
-              {msg.sender === 'user' && (
-                <div className="flex-shrink-0 ml-2">
-                  <FaUser className="text-gray-500" size={24} />
-                </div>
-              )}
             </div>
           ))}
         </ScrollableFeed>

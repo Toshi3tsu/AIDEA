@@ -15,7 +15,7 @@ load_dotenv()
 logging.basicConfig(level=logging.DEBUG)
 
 # カスタム証明書のパス（自己署名証明書を指定）
-CUSTOM_CERT_PATH = "C:\\Users\\toshimitsu_fujiki\\Cato Networks CA.crt"
+CUSTOM_CERT_PATH = "C:\\Users\\toshimitsu_fujiki\\OpenAI_Cato_Networks_CA.crt"
 
 # httpxクライアントを構築
 httpx_client = httpx.Client(

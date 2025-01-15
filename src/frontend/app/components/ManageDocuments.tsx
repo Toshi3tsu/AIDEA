@@ -7,6 +7,7 @@ import useChatStore from '../store/chatStore';
 import axios from 'axios';
 import Select from 'react-select';
 import { Download, Trash2 } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
 
 interface UploadedFile {
   filename: string;
@@ -36,8 +37,7 @@ export default function ManageDocuments() {
     selectedProject,
     setSelectedSource,
   } = useProjectStore();
-  const { resetMessages } = useChatStore();
-  
+
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [selectionOptions, setSelectionOptions] = useState<SelectionOption[]>([]);
   const [fileContent, setFileContent] = useState<string | null>(null);
@@ -68,7 +68,7 @@ export default function ManageDocuments() {
       // selectionOptionsの更新はfetchFilesForProject内で実施
     } catch (error) {
       console.error('Error fetching Slack channels:', error);
-      alert('Slackチャンネルの取得に失敗しました。');
+      // alert('Slackチャンネルの取得に失敗しました。');
     }
   };
 
@@ -88,7 +88,6 @@ export default function ManageDocuments() {
 
   const handleSourceSelect = async (selectedOption: SelectionOption | null) => {
     setSelectedSource(selectedOption);
-    resetMessages(); // ソース変更時にチャット履歴をリセット
     setFileContent(null);
 
     // ファイルが選択された場合、その内容を取得
@@ -149,9 +148,9 @@ export default function ManageDocuments() {
         <div className="mb-4">
           <div
             className="p-4 bg-white rounded border overflow-y-auto"
-            style={{ maxHeight: '200px', whiteSpace: 'pre-wrap' }}
+            style={{ maxHeight: '500px', whiteSpace: 'pre-wrap' }}
           >
-            {fileContent}
+            <ReactMarkdown>{fileContent}</ReactMarkdown>
           </div>
         </div>
       )}

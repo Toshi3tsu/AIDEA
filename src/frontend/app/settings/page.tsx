@@ -103,7 +103,7 @@ export default function Settings() {
       setSlackChannels(response.data);
     } catch (error) {
       console.error('Error fetching Slack channels:', error);
-      alert('Slackチャンネルの取得に失敗しました。');
+      // alert('Slackチャンネルの取得に失敗しました。');
     }
   };
 
@@ -223,7 +223,7 @@ export default function Settings() {
       alert('Slackチャンネルがプロジェクトに連携されました。');
     } catch (error) {
       console.error('Error connecting Slack channel:', error);
-      alert('Slackチャンネルの連携に失敗しました。');
+      // alert('Slackチャンネルの連携に失敗しました。');
     }
   };
 
@@ -345,7 +345,7 @@ export default function Settings() {
                                   name="file"
                                   id={`file-input-${project.id}`}
                                   className="hidden"
-                                  accept=".csv,.xlsx"
+                                  accept=".txt,.docx"
                                   onChange={(e) => {
                                     const file = e.target.files?.[0];
                                     if (file) {

@@ -2,99 +2,174 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Info, Clipboard, ClipboardCheck } from 'lucide-react';
-import Select from 'react-select';
+import { Info } from 'lucide-react';
 import useProjectStore from '../store/projectStore';
+import useChatStore from '../store/chatStore';
 import axios from 'axios';
 
+interface ChatRecord {
+  sender: string;
+  message: string;
+  timestamp: string;
+}
+
 export default function RightSidebar() {
-  const [clipboardMessage, setClipboardMessage] = useState('Copy to Clipboard');
-  const { projects, selectedProject, setProjects, setSelectedProject } = useProjectStore();
+  const { projects, selectedProject, setProjects, setSelectedProject, sessionTitles, setSessionTitles, setSelectedSession } = useProjectStore();
+  const { resetMessages, addMessage } = useChatStore();
+  const [selectedSessionLocal, setSelectedSessionLocal] = useState<string | null>(null);
+  const [openDropdownSession, setOpenDropdownSession] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchProjects();
-  }, []);
+    if (selectedProject) {
+      fetchSessionTitles(selectedProject.id);
+    }
+  }, [selectedProject]);
 
-  const fetchProjects = async () => {
+  const fetchSessionTitles = async (projectId: number) => {
     try {
-      const response = await axios.get<Project[]>('http://127.0.0.1:8000/api/projects');
-      setProjects(response.data);
+      const response = await axios.get<string[]>(`http://127.0.0.1:8000/api/chat_history/sessions/${projectId}`);
+      setSessionTitles(response.data);
     } catch (error) {
-      console.error('Error fetching projects:', error);
-      alert('プロジェクトの取得に失敗しました。');
+      console.error('Error fetching session titles:', error);
     }
   };
 
-  const handleProjectSelect = (selectedOption: any) => {
-    const project = projects.find((p) => p.id === selectedOption?.value);
-    setSelectedProject(project || null);
+  const toggleDropdown = (title: string) => {
+    setOpenDropdownSession(prev => (prev === title ? null : title));
   };
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText('Example text to copy');
-    setClipboardMessage('Copied!');
-    setTimeout(() => setClipboardMessage('Copy to Clipboard'), 2000);
+  const handleSessionSelect = async (sessionTitle: string) => {
+    setSelectedSessionLocal(sessionTitle);
+    setSelectedSession(sessionTitle);
+    resetMessages();
+    try {
+      const response = await axios.get<ChatRecord[]>(`http://127.0.0.1:8000/api/chat_history/history/${selectedProject?.id}/${sessionTitle}`);
+      response.data.forEach(record => {
+        addMessage({ sender: record.sender as 'user' | 'ai', message: record.message });
+      });
+    } catch (error) {
+      console.error('Error loading chat history:', error);
+    }
+  };
+
+  const handleRenameSession = async (sessionTitle: string) => {
+    const newTitle = prompt('新しいセッション名を入力してください:', sessionTitle);
+    if (!newTitle) return;
+    try {
+      await axios.put('http://127.0.0.1:8000/api/chat_history/rename', null, {
+        params: {
+          project_id: selectedProject?.id,
+          old_title: sessionTitle,
+          new_title: newTitle,
+        },
+      });
+      // セッションタイトル一覧を更新
+      fetchSessionTitles(selectedProject!.id);
+    } catch (error) {
+      console.error('Error renaming session:', error);
+    }
+  };
+  
+  const handleDeleteSession = async (sessionTitle: string) => {
+    if (!confirm('このセッションを削除してもよろしいですか？')) return;
+    try {
+      await axios.delete('http://127.0.0.1:8000/api/chat_history/delete', {
+        params: {
+          project_id: selectedProject?.id,
+          session_title: sessionTitle,
+        },
+      });
+      // セッションタイトル一覧を更新
+      fetchSessionTitles(selectedProject!.id);
+    } catch (error) {
+      console.error('Error deleting session:', error);
+    }
+  };
+  
+  const handleMoveProject = async (sessionTitle: string) => {
+    const newProjectIdStr = prompt('新しいプロジェクトIDを入力してください:');
+    if (!newProjectIdStr) return;
+    const newProjectId = parseInt(newProjectIdStr, 10);
+    if (isNaN(newProjectId)) {
+      alert('有効なプロジェクトIDを入力してください。');
+      return;
+    }
+    try {
+      await axios.put('http://127.0.0.1:8000/api/chat_history/move', null, {
+        params: {
+          old_project_id: selectedProject?.id,
+          new_project_id: newProjectId,
+          session_title: sessionTitle,
+        },
+      });
+      // プロジェクト選択を変更するか、ユーザーに知らせる処理を追加
+      alert('セッションのプロジェクト移動が完了しました。');
+    } catch (error) {
+      console.error('Error moving session:', error);
+    }
   };
 
   return (
     <div className="w-64 bg-gray-50 shadow-lg flex flex-col p-4">
       {/* サイドバーヘッダー */}
       <div className="flex items-center justify-between border-b pb-4 mb-4">
-        <h2 className="text-lg font-bold">プロジェクト選択</h2>
+        <h2 className="text-lg font-bold">チャット履歴</h2>
         <Info className="h-5 w-5 text-gray-600" />
       </div>
 
-      {/* プロジェクト選択ドロップダウン */}
+      {/* チャット履歴表示・選択セクション */}
       <div className="mb-4">
-        <Select
-          options={projects.map((project) => ({
-            value: project.id,
-            label: `${project.customer_name} - ${project.issues.substring(0, 30)}${project.issues.length > 30 ? '...' : ''}`,
-          }))}
-          onChange={handleProjectSelect}
-          placeholder="プロジェクトを選択してください"
-          isClearable
-          value={
-            selectedProject
-              ? {
-                  value: selectedProject.id,
-                  label: `${selectedProject.customer_name} - ${selectedProject.issues.substring(0, 30)}${selectedProject.issues.length > 30 ? '...' : ''}`,
-                }
-              : null
-          }
-        />
-      </div>
-
-      {/* 情報表示セクション */}
-      <div className="flex-1 space-y-4">
-        <div className="p-4 bg-white rounded shadow">
-          <h3 className="font-semibold text-sm text-gray-700">Generated Overview</h3>
-          <p className="text-gray-600 text-xs mt-2">
-            This panel displays additional context or details related to the selected solution.
-          </p>
-        </div>
-        <div className="p-4 bg-white rounded shadow">
-          <h3 className="font-semibold text-sm text-gray-700">Usage Tips</h3>
-          <ul className="list-disc list-inside text-gray-600 text-xs mt-2">
-            <li>Click "Generate" to create solutions.</li>
-            <li>Use settings to adjust preferences.</li>
+        {selectedProject ? (
+          <ul className="max-h-120 overflow-y-auto border border-gray-200 rounded p-1">
+            {sessionTitles && sessionTitles.length > 0 ? (
+              sessionTitles.map((title) => (
+                <li
+                  key={title}
+                  className={`relative cursor-pointer p-1 hover:bg-gray-100 ${selectedSessionLocal === title ? 'bg-gray-200' : ''}`}
+                >
+                  <div className="flex items-center justify-between" onClick={() => handleSessionSelect(title)}>
+                    <span>{title}</span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleDropdown(title);
+                      }}
+                      className="ml-2 text-gray-500 hover:text-gray-700"
+                    >
+                      &#x22EE;
+                    </button>
+                  </div>
+                  {openDropdownSession === title && (
+                    <div className="absolute right-0 mt-1 w-40 bg-white border border-gray-200 rounded shadow-lg z-10">
+                      <button
+                        className="block w-full text-left px-2 py-1 hover:bg-gray-100"
+                        onClick={() => handleMoveProject(title)}
+                      >
+                        プロジェクトの移動
+                      </button>
+                      <button
+                        className="block w-full text-left px-2 py-1 hover:bg-gray-100"
+                        onClick={() => handleRenameSession(title)}
+                      >
+                        セッション名称変更
+                      </button>
+                      <button
+                        className="block w-full text-left px-2 py-1 hover:bg-gray-100"
+                        onClick={() => handleDeleteSession(title)}
+                      >
+                        セッション削除
+                      </button>
+                    </div>
+                  )}
+                </li>
+              ))
+            ) : (
+              <p className="text-gray-500">履歴がありません</p>
+            )}
           </ul>
-        </div>
-      </div>
-
-      {/* 操作セクション */}
-      <div className="mt-4 border-t pt-4">
-        <button
-          onClick={handleCopy}
-          className="w-full flex items-center justify-center bg-[#173241] text-white px-4 py-2 rounded"
-        >
-          {clipboardMessage === 'Copied!' ? (
-            <ClipboardCheck className="mr-2 h-4 w-4" />
-          ) : (
-            <Clipboard className="mr-2 h-4 w-4" />
-          )}
-          {clipboardMessage}
-        </button>
+        ) : (
+          <p className="text-gray-500">プロジェクトを選択してください</p>
+        )}
       </div>
     </div>
   );
