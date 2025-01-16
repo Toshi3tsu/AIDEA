@@ -8,8 +8,8 @@ import RightSidebar from './components/RightSidebar'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'Solution Generator',
-  description: 'Generate solution proposals using LLM',
+  title: 'AIDEA',
+  description: 'AI-Driven Enterprise Assistant',
 }
 
 export default function RootLayout({
@@ -19,6 +19,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
+      <head>
+        <link rel="icon" href="/favicon.ico?v=2" />
+      </head>
       <body className={inter.className}>
         <div className="flex h-screen bg-gray-100">
           <Sidebar />

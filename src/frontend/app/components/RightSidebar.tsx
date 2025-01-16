@@ -3,6 +3,7 @@
 
 import { useState, useEffect } from 'react';
 import { Info } from 'lucide-react';
+import Select from 'react-select';
 import useProjectStore from '../store/projectStore';
 import useChatStore from '../store/chatStore';
 import axios from 'axios';
@@ -14,7 +15,7 @@ interface ChatRecord {
 }
 
 export default function RightSidebar() {
-  const { projects, selectedProject, setProjects, setSelectedProject, sessionTitles, setSessionTitles, setSelectedSession } = useProjectStore();
+  const { projects, selectedProject, sessionTitles, setSessionTitles, setSelectedSession, maskingEnabled, setMaskingEnabled } = useProjectStore();
   const { resetMessages, addMessage } = useChatStore();
   const [selectedSessionLocal, setSelectedSessionLocal] = useState<string | null>(null);
   const [openDropdownSession, setOpenDropdownSession] = useState<string | null>(null);
@@ -63,7 +64,6 @@ export default function RightSidebar() {
           new_title: newTitle,
         },
       });
-      // セッションタイトル一覧を更新
       fetchSessionTitles(selectedProject!.id);
     } catch (error) {
       console.error('Error renaming session:', error);
@@ -79,7 +79,6 @@ export default function RightSidebar() {
           session_title: sessionTitle,
         },
       });
-      // セッションタイトル一覧を更新
       fetchSessionTitles(selectedProject!.id);
     } catch (error) {
       console.error('Error deleting session:', error);
@@ -102,7 +101,6 @@ export default function RightSidebar() {
           session_title: sessionTitle,
         },
       });
-      // プロジェクト選択を変更するか、ユーザーに知らせる処理を追加
       alert('セッションのプロジェクト移動が完了しました。');
     } catch (error) {
       console.error('Error moving session:', error);
@@ -113,14 +111,32 @@ export default function RightSidebar() {
     <div className="w-64 bg-gray-50 shadow-lg flex flex-col p-4">
       {/* サイドバーヘッダー */}
       <div className="flex items-center justify-between border-b pb-4 mb-4">
-        <h2 className="text-lg font-bold">チャット履歴</h2>
+        <h2 className="text-lg font-bold">チャット設定</h2>
         <Info className="h-5 w-5 text-gray-600" />
+      </div>
+
+      {/* マスキングポップアップトグルボタン */}
+      <div className="mb-4">
+        <h3 className="text-md font-semibold mb-2">マスキングポップアップ</h3>
+        <div className="flex items-center">
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              className="sr-only peer"
+              checked={maskingEnabled}
+              onChange={() => setMaskingEnabled(!maskingEnabled)}
+            />
+            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-500 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-5 peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-[#CB6CE6]"></div>
+            <span className="ml-3 text-sm font-medium text-gray-900">{maskingEnabled ? '有効' : '無効'}</span>
+          </label>
+        </div>
       </div>
 
       {/* チャット履歴表示・選択セクション */}
       <div className="mb-4">
+        <h3 className="text-md font-semibold mb-2">チャット履歴</h3>
         {selectedProject ? (
-          <ul className="max-h-120 overflow-y-auto border border-gray-200 rounded p-1">
+          <ul className="max-h-180 overflow-y-auto border border-gray-200 rounded p-1">
             {sessionTitles && sessionTitles.length > 0 ? (
               sessionTitles.map((title) => (
                 <li
@@ -128,33 +144,33 @@ export default function RightSidebar() {
                   className={`relative cursor-pointer p-1 hover:bg-gray-100 ${selectedSessionLocal === title ? 'bg-gray-200' : ''}`}
                 >
                   <div className="flex items-center justify-between" onClick={() => handleSessionSelect(title)}>
-                    <span>{title}</span>
+                    <span className="text-sm truncate">{title}</span>
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
                         toggleDropdown(title);
                       }}
-                      className="ml-2 text-gray-500 hover:text-gray-700"
+                      className="ml-2 text-gray-500 hover:text-gray-700 text-sm p-1"
                     >
                       &#x22EE;
                     </button>
                   </div>
                   {openDropdownSession === title && (
-                    <div className="absolute right-0 mt-1 w-40 bg-white border border-gray-200 rounded shadow-lg z-10">
+                    <div className="absolute right-0 mt-1 w-36 bg-white border border-gray-200 rounded shadow-lg z-10">
                       <button
-                        className="block w-full text-left px-2 py-1 hover:bg-gray-100"
+                        className="block w-full text-left text-sm px-2 py-1 hover:bg-gray-100"
                         onClick={() => handleMoveProject(title)}
                       >
                         プロジェクトの移動
                       </button>
                       <button
-                        className="block w-full text-left px-2 py-1 hover:bg-gray-100"
+                        className="block w-full text-left text-sm px-2 py-1 hover:bg-gray-100"
                         onClick={() => handleRenameSession(title)}
                       >
                         セッション名称変更
                       </button>
                       <button
-                        className="block w-full text-left px-2 py-1 hover:bg-gray-100"
+                        className="block w-full text-left text-sm px-2 py-1 hover:bg-gray-100"
                         onClick={() => handleDeleteSession(title)}
                       >
                         セッション削除
@@ -164,11 +180,11 @@ export default function RightSidebar() {
                 </li>
               ))
             ) : (
-              <p className="text-gray-500">履歴がありません</p>
+              <p className="text-gray-500 text-sm">履歴がありません</p>
             )}
           </ul>
         ) : (
-          <p className="text-gray-500">プロジェクトを選択してください</p>
+          <p className="text-gray-500 text-sm">プロジェクトを選択してください</p>
         )}
       </div>
     </div>

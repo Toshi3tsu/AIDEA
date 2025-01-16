@@ -8,6 +8,7 @@ import useProjectStore from '../store/projectStore';
 import axios from 'axios';
 import Select from 'react-select';
 import { FaRobot, FaUser } from 'react-icons/fa';
+import msalInstance from '../config/msalInstance';
 
 interface Project {
   id: number;
@@ -46,6 +47,95 @@ export default function Settings() {
   const [uploadProgress, setUploadProgress] = useState<{ [key: number]: number }>({});
   const [searchTerm, setSearchTerm] = useState('');
   const [editingSolution, setEditingSolution] = useState(null);
+  const [activeTab, setActiveTab] = useState<'fileApi' | 'solution' | 'masking'>('fileApi');
+  const [accessToken, setAccessToken] = useState<string | null>(null);
+  const [isMsalInitialized, setIsMsalInitialized] = useState(false);
+  const [groupLinks, setGroupLinks] = useState<{ [projectId: number]: string }>({});
+
+  const initializeMsal = async () => {
+    try {
+      if (!isMsalInitialized) {
+        await msalInstance.initialize(); // MSAL インスタンスを初期化
+        setIsMsalInitialized(true); // 初期化完了フラグを設定
+      }
+    } catch (error) {
+      console.error('Failed to initialize MSAL:', error);
+    }
+  };
+
+  const fetchAccessToken = async () => {
+    try {
+      const accounts = msalInstance.getAllAccounts();
+      let response;
+
+      if (accounts.length > 0) {
+        // サイレント認証
+        response = await msalInstance.acquireTokenSilent({
+          scopes: ['https://graph.microsoft.com/.default'],
+          account: accounts[0],
+        });
+      } else {
+        // リダイレクト認証を使用
+        await msalInstance.loginRedirect({
+          scopes: ['https://graph.microsoft.com/.default'],
+        });
+
+        // リダイレクト後にトークンを取得
+        response = await msalInstance.acquireTokenSilent({
+          scopes: ['https://graph.microsoft.com/.default'],
+          account: msalInstance.getAllAccounts()[0], // リダイレクト後にアカウントを取得
+        });
+      }
+
+      setAccessToken(response.accessToken);
+      console.log('Access Token:', response.accessToken);
+    } catch (error) {
+      console.error('Error fetching access token:', error);
+    }
+  };
+
+  // 特定のグループ ID に関連するプランを取得する関数
+  const fetchPlansByGroup = async (groupId: string, token: string) => {
+    try {
+      const response = await axios.get(
+        `https://graph.microsoft.com/v1.0/planner/plans?$filter=owner eq '${groupId}'`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+      console.log(`Fetched plans for group ${groupId}:`, response.data);
+      // 必要に応じて取得したプランを状態に保存する処理を追加
+    } catch (error) {
+      console.error('Error fetching plans:', error);
+    }
+  };
+
+  // プロジェクトにグループIDを連携させる関数
+  const handleConnectGroup = async (projectId: number) => {
+    const groupId = prompt('連携するグループIDを入力してください:');
+    if (!groupId) return;
+
+    // 入力されたグループIDを状態に保存
+    setGroupLinks((prev) => ({ ...prev, [projectId]: groupId }));
+
+    // オプション: グループIDに関連するプランを取得
+    if (accessToken) {
+      await fetchPlansByGroup(groupId, accessToken);
+    }
+  };
+
+  useEffect(() => {
+    const initialize = async () => {
+      await initializeMsal();
+      if (isMsalInitialized) {
+        fetchAccessToken();
+      }
+    };
+
+    initialize();
+  }, [isMsalInitialized]);
 
   // Fetch solutions from backend
   useEffect(() => {
@@ -251,199 +341,259 @@ export default function Settings() {
       {/* タイトル */}
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold text-gray-800">設定</h1>
+        <p>Access Token: {accessToken ? accessToken : '未取得'}</p>
       </div>
 
-      {/* プロジェクトとSlackチャンネルの連携テーブル */}
-      <div className="bg-white p-6 rounded-lg shadow mb-6">
-        <h2 className="text-xl font-semibold mb-4">ファイル管理・API連携</h2>
-        <table className="w-full border-collapse">
-          <thead className="bg-gray-100">
-            <tr>
-              <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">プロジェクト名</th>
-              <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Slackチャンネル</th>
-              <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">ファイル数</th>
-              <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">アクション</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-200">
-            {projects.map((project) => {
-              const linkedSlack = connectedSlackChannels.find((link) => link.project_id === project.id);
-              const slackChannel = slackChannels.find((channel) => channel.id === linkedSlack?.slack_channel_id);
-              const files = projectFiles[project.id] || [];
-              return (
-                <tr key={project.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-4 py-3 text-gray-800">{project.customer_name}</td>
-                  <td className="px-4 py-3 text-gray-800">
-                    {slackChannel ? (
-                      slackChannel.name
-                    ) : (
-                      <button
-                        onClick={() => handleConnectSlack(project.id)}
-                        className="text-blue-500 hover:text-blue-700"
-                      >
-                        連携
-                      </button>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-center text-gray-800">{files.length}</td>
-                  <td className="px-4 py-3 text-center">
-                    <div className="flex justify-center items-center space-x-2">
-                      {/* ファイル管理のドロップダウン */}
-                      <details className="group relative">
-                        <summary className="cursor-pointer text-gray-600 hover:text-gray-800">
-                          {files.length > 0 ? `${files.length} ファイル` : 'ファイルなし'}
-                        </summary>
-                        <div className="absolute left-0 mt-2 w-64 bg-white border border-gray-200 rounded shadow-lg z-10">
-                          {files.length > 0 && (
-                            <ul className="max-h-40 overflow-y-auto">
-                              {files.map((file) => (
-                                <li key={file.filename} className="flex justify-between items-center px-4 py-2 hover:bg-gray-100">
-                                  <span className="text-sm">{file.filename}</span>
-                                  <div className="flex space-x-1">
-                                    <button
-                                      onClick={() => handleDownloadFile(project.id, file.filename)}
-                                      className="text-[#173241] hover:text-green-700"
-                                      title="ダウンロード"
-                                    >
-                                      <Download className="h-4 w-4" />
-                                    </button>
-                                    <button
-                                      onClick={() => handleDeleteFile(project.id, file.filename)}
-                                      className="text-red-500 hover:text-red-700"
-                                      title="削除"
-                                    >
-                                      <Trash2 className="h-4 w-4" />
-                                    </button>
-                                  </div>
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-                            {/* ファイルアップロードフォーム */}
-                            <form
-                              onSubmit={(e: FormEvent) => {
-                                e.preventDefault();
-                                const target = e.target as typeof e.target & {
-                                  file: { files: FileList };
-                                };
-                                const file = target.file.files[0];
-                                if (file) {
-                                  handleFileUpload(project.id, file);
-                                }
-                              }}
-                              className="px-4 py-2 border-t border-gray-200"
-                            >
-                              <div className="flex items-center space-x-2">
-                                <label
-                                  htmlFor={`file-input-${project.id}`}
-                                  className="cursor-pointer bg-gray-200 text-gray-700 px-2 py-1 rounded hover:bg-gray-300 text-xs"
-                                >
-                                  ファイル追加
-                                </label>
-                                <input
-                                  type="file"
-                                  name="file"
-                                  id={`file-input-${project.id}`}
-                                  className="hidden"
-                                  accept=".txt,.docx"
-                                  onChange={(e) => {
-                                    const file = e.target.files?.[0];
-                                    if (file) {
-                                      handleFileUpload(project.id, file);
-                                    }
-                                  }}
-                                />
-                                {uploadProgress[project.id] > 0 && (
-                                  <span className="text-xs text-gray-600">{uploadProgress[project.id]}%</span>
-                                )}
-                              </div>
-                            </form>
-                        </div>
-                      </details>
-                    </div>
-                  </td>
+      {/* タブナビゲーション */}
+      <div className="mb-6">
+        <nav className="flex space-x-4">
+          <button
+            className={`px-4 py-2 rounded ${activeTab === 'fileApi' ? 'bg-[#173241] text-white' : 'bg-gray-200 text-gray-700'}`}
+            onClick={() => setActiveTab('fileApi')}
+          >
+            ファイル・API管理
+          </button>
+          <button
+            className={`px-4 py-2 rounded ${activeTab === 'solution' ? 'bg-[#173241] text-white' : 'bg-gray-200 text-gray-700'}`}
+            onClick={() => setActiveTab('solution')}
+          >
+            ソリューション管理
+          </button>
+          <button
+            className={`px-4 py-2 rounded ${activeTab === 'masking' ? 'bg-[#173241] text-white' : 'bg-gray-200 text-gray-700'}`}
+            onClick={() => setActiveTab('masking')}
+          >
+            マスキング管理
+          </button>
+        </nav>
+      </div>
+
+      {/* コンテンツ */}
+      {activeTab === 'fileApi' && (
+        <div>
+          {/* プロジェクトとSlackチャンネルの連携テーブル */}
+          <div className="bg-white p-6 rounded-lg shadow mb-6">
+            <h2 className="text-xl font-semibold mb-4">ファイル管理・API連携</h2>
+            <table className="w-full border-collapse">
+              <thead className="bg-gray-100">
+                <tr>
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">プロジェクト名</th>
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Slack</th>
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Planner</th>
+                  <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">ファイル数</th>
+                  <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">アクション</th>
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {projects.map((project) => {
+                  const linkedSlack = connectedSlackChannels.find((link) => link.project_id === project.id);
+                  const slackChannel = slackChannels.find((channel) => channel.id === linkedSlack?.slack_channel_id);
+                  const files = projectFiles[project.id] || [];
+                  const groupId = groupLinks[project.id];
 
-      {/* Upload Section */}
-      <div className="bg-white p-6 rounded-lg shadow mb-6">
-        <h2 className="text-xl font-semibold mb-4">ソリューション管理</h2>
-        <div className="flex items-center space-x-4">
-          <label className="cursor-pointer bg-[#CB6CE6] text-white px-4 py-2 rounded flex items-center hover:bg-[#D69292]">
-            <Upload className="mr-2" />
-            ファイルを選択
-            <input
-              type="file"
-              className="hidden"
-              onChange={handleFileUpload}
-              accept=".txt,.docx"
-            />
-          </label>
-          <span className="text-sm text-gray-600">対応フォーマット: Text, Word</span>
-        </div>
-        {uploadProgress > 0 && (
-          <div className="mt-4">
-            <div className="w-full bg-gray-200 rounded-full h-2.5">
-              <div
-                className="bg-[#76878F] h-2.5 rounded-full"
-                style={{ width: `${uploadProgress}%` }}
-              ></div>
-            </div>
+                  return (
+                    <tr key={project.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-4 py-3 text-gray-800">{project.customer_name}</td>
+                      <td className="px-4 py-3 text-gray-800">
+                        {slackChannel ? (
+                          slackChannel.name
+                        ) : (
+                          <button
+                            onClick={() => {/* Slack連携の処理 */}}
+                            className="text-blue-500 hover:text-blue-700"
+                          >
+                            チャンネル連携
+                          </button>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-gray-800">
+                        {groupId ? (
+                          <span>{groupId}</span>
+                        ) : (
+                          <button
+                            onClick={() => handleConnectGroup(project.id)}
+                            className="text-blue-500 hover:text-blue-700"
+                          >
+                            グループ連携
+                          </button>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-center text-gray-800">{files.length}</td>
+                      <td className="px-4 py-3 text-center">
+                        {/* 既存のファイル管理アクション UI */}
+                        <div className="flex justify-center items-center space-x-2">
+                          <details className="group relative">
+                            <summary className="cursor-pointer text-gray-600 hover:text-gray-800">
+                              {files.length > 0 ? `${files.length} ファイル` : 'ファイルなし'}
+                            </summary>
+                            <div className="absolute left-0 mt-2 w-64 bg-white border border-gray-200 rounded shadow-lg z-10">
+                              {files.length > 0 && (
+                                <ul className="max-h-40 overflow-y-auto">
+                                  {files.map((file) => (
+                                    <li key={file.filename} className="flex justify-between items-center px-4 py-2 hover:bg-gray-100">
+                                      <span className="text-sm">{file.filename}</span>
+                                      <div className="flex space-x-1">
+                                        <button
+                                          onClick={() => {/* ダウンロード処理 */}}
+                                          className="text-[#173241] hover:text-green-700"
+                                          title="ダウンロード"
+                                        >
+                                          <Download className="h-4 w-4" />
+                                        </button>
+                                        <button
+                                          onClick={() => {/* 削除処理 */}}
+                                          className="text-red-500 hover:text-red-700"
+                                          title="削除"
+                                        >
+                                          <Trash2 className="h-4 w-4" />
+                                        </button>
+                                      </div>
+                                    </li>
+                                  ))}
+                                </ul>
+                              )}
+                              {/* ファイルアップロードフォーム */}
+                              <form
+                                onSubmit={(e) => {
+                                  e.preventDefault();
+                                  const target = e.target as typeof e.target & {
+                                    file: { files: FileList };
+                                  };
+                                  const file = target.file.files[0];
+                                  if (file) {
+                                    // ファイルアップロードの処理
+                                  }
+                                }}
+                                className="px-4 py-2 border-t border-gray-200"
+                              >
+                                <div className="flex items-center space-x-2">
+                                  <label
+                                    htmlFor={`file-input-${project.id}`}
+                                    className="cursor-pointer bg-gray-200 text-gray-700 px-2 py-1 rounded hover:bg-gray-300 text-xs"
+                                  >
+                                    ファイル追加
+                                  </label>
+                                  <input
+                                    type="file"
+                                    name="file"
+                                    id={`file-input-${project.id}`}
+                                    className="hidden"
+                                    accept=".txt,.docx"
+                                    onChange={(e) => {
+                                      const file = e.target.files?.[0];
+                                      if (file) {
+                                        // ファイルアップロードの処理
+                                      }
+                                    }}
+                                  />
+                                  {uploadProgress[project.id] > 0 && (
+                                    <span className="text-xs text-gray-600">{uploadProgress[project.id]}%</span>
+                                  )}
+                                </div>
+                              </form>
+                            </div>
+                          </details>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
-        )}
-      </div>
-
-      {/* Solution Database Section */}
-      <div className="bg-white p-6 rounded-lg shadow">
-        <h2 className="text-xl font-semibold mb-4">ソリューションデータベース</h2>
-        <div className="mb-4 relative">
-          <Search className="absolute left-3 top-3 text-gray-400" />
-          <input
-            type="text"
-            placeholder="ソリューションを検索..."
-            className="pl-10 p-2 border rounded w-full focus:ring-[#76878F] focus:border-[#76878F]"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
         </div>
-        <table className="w-full border-collapse">
-          <thead className="bg-gray-100">
-            <tr>
-              <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">名前</th>
-              <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">カテゴリー</th>
-              <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">特徴</th>
-              <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">アクション</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-200">
-            {filteredSolutions.map((solution) => (
-              <tr key={solution.id} className="hover:bg-gray-50 transition-colors">
-                <td className="px-4 py-3 text-gray-800">{solution.name}</td>
-                <td className="px-4 py-3 text-gray-800">{solution.category}</td>
-                <td className="px-4 py-3 text-gray-800">{solution.features}</td>
-                <td className="px-4 py-3 text-center">
-                  <button
-                    onClick={() => handleEdit(solution.id)}
-                    className="text-[#173241] hover:text-[#76878F] mr-2"
-                  >
-                    <Edit2 className="h-5 w-5" />
-                  </button>
-                  <button
-                    onClick={() => handleDelete(solution.id)}
-                    className="text-[#BF4242] hover:text-[#D69292]"
-                  >
-                    <Trash2 className="h-5 w-5" />
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      )}
+
+      {activeTab === 'solution' && (
+        <div>
+          {/* Upload Section */}
+          <div className="bg-white p-6 rounded-lg shadow mb-6">
+            <h2 className="text-xl font-semibold mb-4">ソリューション管理</h2>
+            <div className="flex items-center space-x-4">
+              <label className="cursor-pointer bg-[#CB6CE6] text-white px-4 py-2 rounded flex items-center hover:bg-[#D69292]">
+                <Upload className="mr-2" />
+                ファイルを選択
+                <input
+                  type="file"
+                  className="hidden"
+                  onChange={handleFileUpload}
+                  accept=".txt,.docx"
+                />
+              </label>
+              <span className="text-sm text-gray-600">対応フォーマット: Text, Word</span>
+            </div>
+            {uploadProgress > 0 && (
+              <div className="mt-4">
+                <div className="w-full bg-gray-200 rounded-full h-2.5">
+                  <div
+                    className="bg-[#76878F] h-2.5 rounded-full"
+                    style={{ width: `${uploadProgress}%` }}
+                  ></div>
+                </div>
+              </div>
+            )}
+          </div>
+    
+          {/* Solution Database Section */}
+          <div className="bg-white p-6 rounded-lg shadow">
+            <h2 className="text-xl font-semibold mb-4">ソリューションデータベース</h2>
+            <div className="mb-4 relative">
+              <Search className="absolute left-3 top-3 text-gray-400" />
+              <input
+                type="text"
+                placeholder="ソリューションを検索..."
+                className="pl-10 p-2 border rounded w-full focus:ring-[#76878F] focus:border-[#76878F]"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+            <table className="w-full border-collapse">
+              <thead className="bg-gray-100">
+                <tr>
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">名前</th>
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">カテゴリー</th>
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">特徴</th>
+                  <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">アクション</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {filteredSolutions.map((solution) => (
+                  <tr key={solution.id} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-4 py-3 text-gray-800">{solution.name}</td>
+                    <td className="px-4 py-3 text-gray-800">{solution.category}</td>
+                    <td className="px-4 py-3 text-gray-800">{solution.features}</td>
+                    <td className="px-4 py-3 text-center">
+                      <button
+                        onClick={() => handleEdit(solution.id)}
+                        className="text-[#173241] hover:text-[#76878F] mr-2"
+                      >
+                        <Edit2 className="h-5 w-5" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(solution.id)}
+                        className="text-[#BF4242] hover:text-[#D69292]"
+                      >
+                        <Trash2 className="h-5 w-5" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'masking' && (
+        <div>
+          {/* マスキング管理コンテンツ */}
+          <div className="bg-white p-6 rounded-lg shadow mb-6">
+            <h2 className="text-xl font-semibold mb-4">マスキング管理</h2>
+            <p className="text-gray-700">ここにマスキング管理のコンテンツを追加します。</p>
+            {/* 具体的なUIや機能はここに実装してください */}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

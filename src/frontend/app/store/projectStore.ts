@@ -9,6 +9,14 @@ interface Project {
   bpmn_xml: string;
 }
 
+interface Task {
+  title: string;
+  tag: '新規作成' | '更新' | 'クローズ' | '無視';
+  assignee: string;  // 担当者名
+  due_date: string;  // 期限
+  detail: string;    // 詳細
+}
+
 interface SlackChannel {
   id: string;
   name: string;
@@ -42,6 +50,10 @@ interface ProjectState {
   setSessionTitles: (titles: string[]) => void;
   selectedSession: string | null;
   setSelectedSession: (session: string) => void;
+  maskingEnabled: boolean;
+  setMaskingEnabled: (value: boolean) => void;
+  extractedTasks: Task[];
+  setExtractedTasks: (tasks: Task[]) => void;
   setProjects: (projects: Project[]) => void;
   setSelectedProject: (project: Project | null) => void;
   setSlackChannels: (channels: SlackChannel[]) => void;
@@ -61,6 +73,10 @@ const useProjectStore = create<ProjectState>((set) => ({
   setSessionTitles: (titles) => set({ sessionTitles: titles }),
   selectedSession: null,
   setSelectedSession: (session) => set({ selectedSession: session }),
+  maskingEnabled: true, // デフォルトで有効
+  setMaskingEnabled: (value) => set({ maskingEnabled: value }),
+  extractedTasks: [],
+  setExtractedTasks: (tasks) => set({ extractedTasks: tasks }),
   setProjects: (projects) => set({ projects }),
   setSelectedProject: (project) => set({ selectedProject: project }),
   setSlackChannels: (channels) => set({ slackChannels: channels }),

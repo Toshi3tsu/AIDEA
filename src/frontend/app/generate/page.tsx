@@ -338,9 +338,19 @@ export default function Generate() {
     <div className="p-6 bg-gray-50 min-h-screen">
       {/* タイトルとプロジェクト選択 */}
       <div className="flex justify-between items-center mb-2">
-        <h1 className="text-3xl font-bold text-gray-800">課題解決AI</h1>
+        <h1 className="text-3xl font-bold text-gray-800">コンサルティングAI</h1>
       </div>
 
+      {/* プロジェクトが選択されていない場合のUI */}
+      {!selectedProject && (
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <p className="text-lg text-gray-700">◀「プロジェクト選択」からプロジェクトを選択してください。</p>
+          </div>
+        </div>
+      )}
+
+      {/* プロジェクトが選択されている場合 */}
       {selectedProject && renderStep()}
 
       {selectedProject && state.solutionRequirements && (
@@ -454,14 +464,14 @@ const Step1 = ({
         <div className="flex justify-center flex-1">
           <button
             onClick={handleGenerateFlow}
-            className="px-4 py-2 bg-[#CB6CE6] text-white font-bold rounded hover:bg-[#D69292] disabled:opacity-50"
+            className="px-4 py-2 bg-[#CB6CE6] text-white font-bold rounded hover:bg-[#A94CCB] disabled:opacity-50"
             disabled={!customerInfo || !issues || loading}
           >
             {loading ? '生成中...' : '業務フロー生成'}
           </button>
           <button
             onClick={handleGenerateRequirements}
-            className="px-4 py-2 bg-[#CB6CE6] text-white font-bold rounded hover:bg-[#D69292] ml-10 disabled:opacity-50"
+            className="px-4 py-2 bg-[#CB6CE6] text-white font-bold rounded hover:bg-[#A94CCB] ml-10 disabled:opacity-50"
             disabled={!customerInfo || !issues || loading}
           >
             {loading ? '生成中...' : 'ソリューション要件生成'}
@@ -470,7 +480,7 @@ const Step1 = ({
         <div className="flex justify-end">
           <button
             onClick={nextStep}
-            className="px-4 py-2 bg-[#BF4242] text-white font-bold rounded hover:bg-[#76878F] disabled:opacity-50"
+            className="px-4 py-2 bg-[#173241] text-white font-bold rounded hover:bg-[#0F2835] disabled:opacity-50"
             disabled={!isStepComplete}
           >
             次へ
@@ -531,7 +541,7 @@ const Step2 = ({
       </button>
       <button
         onClick={nextStep}
-        className="px-4 py-2 bg-[#BF4242] text-white font-bold rounded"
+        className="px-4 py-2 bg-[#173241] text-white font-bold rounded"
         disabled={!selectedSolution}
       >
         次へ

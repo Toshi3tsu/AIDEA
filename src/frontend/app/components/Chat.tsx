@@ -9,35 +9,80 @@ import ScrollableFeed from 'react-scrollable-feed';
 import { FaRobot, FaUser } from 'react-icons/fa';
 import ReactMarkdown from 'react-markdown';
 import { Send } from 'lucide-react';
+import MaskingConfirmationModal from './MaskingConfirmationModal';
 
 export default function Chat() {
   const { messages, addMessage, resetMessages } = useChatStore();
   const { selectedProject, slackChannels } = useProjectStore();
   const { selectedSource } = useProjectStore();
+  const { maskingEnabled } = useProjectStore();
   const [inputMessage, setInputMessage] = useState<string>('');
   const [sessionTitle, setSessionTitle] = useState<string>('');
   const { selectedSession, setSelectedSession } = useProjectStore();
   const [sessionTitleInput, setSessionTitleInput] = useState<string>(selectedSession || '');
   const [sending, setSending] = useState<boolean>(false);
+  const [showMaskingModal, setShowMaskingModal] = useState(false);
+  const [maskedText, setMaskedText] = useState<string>("");
 
   useEffect(() => {
     setSessionTitleInput(selectedSession || '');
   }, [selectedSession]);
 
+  const LoadingIndicator = () => (
+    <div className="flex items-center ml-2">
+      <svg className="animate-spin h-5 w-5 text-gray-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+      </svg>
+      <span className="ml-1 text-sm text-gray-600">処理中...</span>
+    </div>
+  );
+
   const handleSendMessage = async (e: FormEvent) => {
     e.preventDefault();
     if (!inputMessage.trim()) return;
 
-    // 最初のメッセージが送信されるタイミングでセッションタイトルが未設定なら設定
-    if (!selectedSession && !sessionTitleInput) {
-      const inferredTitle = inputMessage.trim().slice(0, 50);
-      setSessionTitleInput(inferredTitle);
-      setSelectedSession(inferredTitle);
+    setSending(true);
+
+    let maskedText = "";
+    // maskingEnabled が true の場合にのみマスキングを実行
+    if (maskingEnabled) {
+      try {
+        const maskResponse = await axios.post<{ masked_text: string }>(
+          'http://127.0.0.1:8000/api/mask/mask',
+          { text: inputMessage }
+        );
+        const result = maskResponse.data.masked_text;
+        setMaskedText(result);
+        // マスキングされたテキストと元のテキストが異なる場合はモーダル表示
+        if (result && result.trim() !== inputMessage) {
+          setShowMaskingModal(true);
+        } else {
+          // 異常がない場合はそのまま送信処理へ
+          await proceedWithSend(inputMessage);
+        }
+      } catch (error) {
+        console.error('Error during masking:', error);
+        await proceedWithSend(inputMessage);
+      }
+    } else {
+      // マスキングが無効の場合、直接送信
+      await proceedWithSend(inputMessage);
     }
 
-    // ユーザーのメッセージを追加
-    addMessage({ sender: 'user', message: inputMessage });
-    const userMessage = inputMessage;
+    setSending(false);
+  };
+
+  // 実際にメッセージを送信する処理を関数化
+  const proceedWithSend = async (messageToSend: string) => {
+    // セッションタイトル設定などの既存の処理をここに移動
+    if (!selectedSession && !sessionTitleInput) {
+      setSessionTitleInput(messageToSend.trim().slice(0, 50));
+      setSelectedSession(messageToSend.trim().slice(0, 50));
+    }
+
+    addMessage({ sender: 'user', message: messageToSend });
+    const userMessage = messageToSend;
     setInputMessage('');
     setSending(true);
 
@@ -152,6 +197,25 @@ export default function Chat() {
         </ScrollableFeed>
       </div>
 
+      {showMaskingModal && (
+        <MaskingConfirmationModal
+          originalText={inputMessage}
+          maskedText={maskedText}
+          onSendOriginal={async (editedText) => {
+            setShowMaskingModal(false);
+            await proceedWithSend(editedText);
+          }}
+          onSendMasked={async () => {
+            setShowMaskingModal(false);
+            await proceedWithSend(maskedText);
+          }}
+          onCancel={() => {
+            setShowMaskingModal(false);
+            setSending(false);
+          }}
+        />
+      )}
+
       {/* メッセージ入力フィールド */}
       <form onSubmit={handleSendMessage} className="flex items-center">
         <input
@@ -160,15 +224,16 @@ export default function Chat() {
           onChange={(e) => setInputMessage(e.target.value)}
           placeholder="メッセージを入力..."
           className="flex-1 border rounded-l-lg px-4 py-2 focus:outline-none"
+          disabled={sending}  // 送信中は入力も無効化
         />
         <button
           type="submit"
-          className={`bg-[#CB6CE6] text-white px-4 py-2 rounded-r-lg hover:bg-[#D69292] flex items-center justify-center ${
-            sending ? 'opacity-50 cursor-not-allowed' : ''
+          className={`bg-[#CB6CE6] text-white px-4 py-2 rounded-r-lg flex items-center justify-center ${
+            sending ? 'opacity-50 cursor-not-allowed' : 'hover:bg-[#A94CCB]'
           }`}
           disabled={sending}
         >
-          <Send className="h-5 w-5" />
+          {sending ? <LoadingIndicator /> : <Send className="h-5 w-5" />}
         </button>
       </form>
     </div>

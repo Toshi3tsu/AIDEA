@@ -30,5 +30,8 @@ src/backend/venv/
 # 環境変数ファイル
 src/backend/.env
 
+# マスキングモデル
+src/backend/model/
+
 # データファイル (必要に応じて)
 data/
