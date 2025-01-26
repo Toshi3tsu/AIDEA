@@ -4,7 +4,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useState, useEffect } from 'react'
-import { Home, Settings, Layers, Lightbulb, FileText, ChartGantt, Key } from 'lucide-react'
+import { Home, Settings, Layers, Lightbulb, FileText, ChartGantt, Key, Search } from 'lucide-react'
 import useProjectStore from '../store/projectStore';
 import axios from 'axios';
 
@@ -42,7 +42,7 @@ export default function Sidebar() {
   const isActive = (path: string) => pathname === path
 
   return (
-    <div className="w-64 bg-white shadow-lg flex flex-col">
+    <div className="w-64 bg-white shadow-lg flex flex-col h-screen overflow-y-auto">
       {/* サイドバーヘッダー */}
       <div className="px-4 py-2 border-b">
         <img src="/logo.png" alt="Logo" className="w-36 h-auto mx-auto" />
@@ -90,6 +90,17 @@ export default function Sidebar() {
         <Lightbulb className="mr-2 h-5 w-5" />
         コンサルティングAI
       </Link>
+      {/* リサーチAI リンクを追加 */}
+      <Link
+        href="/research-ai"
+        className={`flex items-center px-4 py-2 mt-2 text-gray-700 ${
+          isActive('/research-ai') ? 'bg-gray-200 font-bold' : ''
+        }`}
+        aria-current={isActive('/research-ai') ? 'page' : undefined}
+      >
+        <Search className="mr-2 h-5 w-5" /> {/* Search アイコンを使用 */}
+        リサーチAI
+      </Link>
       <Link
         href="/settings"
         className={`flex items-center px-4 py-2 mt-2 text-gray-700 ${
@@ -105,27 +116,26 @@ export default function Sidebar() {
         {/* プロジェクト選択 */}
         <div className="px-2">
           <h3 className="text-md font-semibold mb-2">プロジェクト選択</h3>
-          <ul className="max-h-80 overflow-y-auto border border-gray-200 rounded-lg p-2 bg-gray-50">
-            {projects.length > 0 ? (
+          <select
+            className="w-full px-3 py-2 border rounded"
+            onChange={(e) => handleProjectSelect(Number(e.target.value))}
+            value={selectedProject?.id || ''} // selectedProject を value に設定して、現在の選択状態を反映させる
+          >
+            <option value="" disabled={projects.length === 0} selected={!selectedProject}>
+              {projects.length > 0 ? 'プロジェクトを選択してください' : 'プロジェクトがありません'}
+            </option>
+            {projects.length > 0 && (
               projects.map((project) => (
-                <li
-                  key={project.id}
-                  className={`cursor-pointer p-2 text-sm rounded-lg hover:bg-gray-100 ${
-                    selectedProject?.id === project.id ? 'bg-gray-200 font-bold' : ''
-                  }`}
-                  onClick={() => handleProjectSelect(project.id)}
-                >
+                <option key={project.id} value={project.id}>
                   {project.customer_name}
-                </li>
+                </option>
               ))
-            ) : (
-              <p className="text-sm text-gray-500">プロジェクトがありません</p>
             )}
-          </ul>
+          </select>
         </div>
       </nav>
 
-      <div className="px-4 py-4 border-t">
+      <div className="px-4 py-2 border-t">
         <Link
           href="/product-management"
           className={`flex items-center px-4 py-2 mt-4 text-gray-700 ${

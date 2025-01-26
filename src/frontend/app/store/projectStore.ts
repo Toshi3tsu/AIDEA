@@ -5,8 +5,13 @@ interface Project {
   id: number;
   customer_name: string;
   issues: string;
-  has_flow_flag: boolean;
+  is_archived: boolean;
   bpmn_xml: string;
+  stage: string;
+  category: string;
+  slack_channel_id: string;
+  slack_tag: string;
+  box_folder_id?: string;
 }
 
 interface Task {

@@ -4,6 +4,7 @@
 import React, { useState, useEffect, FormEvent } from 'react';
 import useChatStore from '../store/chatStore';
 import useProjectStore from '../store/projectStore';
+import { useModelStore } from '../store/modelStore';
 import axios from 'axios';
 import ScrollableFeed from 'react-scrollable-feed';
 import { FaRobot, FaUser } from 'react-icons/fa';
@@ -48,10 +49,9 @@ export default function Chat() {
     // maskingEnabled が true の場合にのみマスキングを実行
     if (maskingEnabled) {
       try {
-        const maskResponse = await axios.post<{ masked_text: string }>(
-          'http://127.0.0.1:8000/api/mask/mask',
-          { text: inputMessage }
-        );
+        const maskResponse = await axios.post<{ masked_text: string }>('http://127.0.0.1:8000/api/mask/mask',{
+          text: inputMessage,
+        });
         const result = maskResponse.data.masked_text;
         setMaskedText(result);
         // マスキングされたテキストと元のテキストが異なる場合はモーダル表示
@@ -83,12 +83,14 @@ export default function Chat() {
 
     addMessage({ sender: 'user', message: messageToSend });
     const userMessage = messageToSend;
+    const { selectedModel } = useModelStore.getState();
     setInputMessage('');
     setSending(true);
 
     try {
       let chatRequest: any = {
         message: userMessage,
+        model: selectedModel.value,
         source_type: 'none',
         source_id: null,
       };

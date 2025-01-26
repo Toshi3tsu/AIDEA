@@ -6,7 +6,7 @@ import os
 from dotenv import load_dotenv
 from typing import Optional
 from .files import UploadedFile
-from .slack import get_project_slack_channel, ProjectSlackLink, project_slack_links
+from .slack import get_project_slack_channel, ProjectSlackLink
 import logging
 import httpx
 
@@ -15,25 +15,48 @@ load_dotenv()
 # ログの設定
 logging.basicConfig(level=logging.DEBUG)
 
-# カスタム証明書のパス（自己署名証明書を指定）
-CUSTOM_CERT_PATH = "C:\\Users\\toshimitsu_fujiki\\OpenAI_Cato_Networks_CA.crt"
+# モデルごとの設定（証明書とAPIキー）
+MODEL_CONFIG = {
+    "gpt-4o-mini": {
+        "api_key": os.getenv("OPENAI_API_KEY"),
+        "cert_path": "C:\\Users\\toshimitsu_fujiki\\OpenAI_Cato_Networks_CA.crt"
+    },
+    "deepseek-chat": {
+        "api_key": os.getenv("DEEPSEEK_API_KEY"),
+        "cert_path": "C:\\Users\\toshimitsu_fujiki\\DeepSeek_CA.crt"
+    }
+}
 
-# httpxクライアントを構築
-httpx_client = httpx.Client(
-    verify=CUSTOM_CERT_PATH  # 自己署名証明書を指定
-)
+def get_client(model: str):
+    """
+    選択されたモデルに基づき、適切なAPIキーと証明書、エンドポイントを適用してOpenAIクライアントを返す。
+    """
+    if model not in MODEL_CONFIG:
+        raise ValueError(f"指定されたモデル '{model}' は無効です。")
 
-# OpenAIクライアントにカスタムhttpxクライアントを渡す
-api_key = os.getenv("OPENAI_API_KEY")
-if not api_key:
-    raise ValueError("APIキーが設定されていません。")
+    model_config = MODEL_CONFIG[model]
 
-client = OpenAI(api_key=api_key, http_client=httpx_client)
+    # APIキーの確認
+    api_key = model_config.get("api_key")
+    if not api_key:
+        raise ValueError(f"{model} の APIキーが設定されていません。")
+
+    # DeepSeekモデル用の特定のエンドポイント設定
+    base_url = "https://api.deepseek.com" if model == "deepseek-chat" else "https://api.openai.com/v1"
+
+    # HTTPクライアントの作成（適切な証明書の設定）
+    httpx_client = httpx.Client(
+        verify=model_config["cert_path"]
+    )
+
+    # OpenAIクライアントの作成（DeepSeekの場合はbase_urlを指定）
+    return OpenAI(api_key=api_key, base_url=base_url, http_client=httpx_client)
 
 router = APIRouter()
 
 class ChatRequest(BaseModel):
     message: str
+    model: str
     source_type: Optional[str] = None  # 'file' または 'slack'
     source_id: Optional[str] = None    # ファイル名またはSlackチャンネルID
 
@@ -46,6 +69,8 @@ async def chat_endpoint(chat_request: ChatRequest):
     チャットのリクエストを処理し、選択されたソース（ファイルまたはSlackチャンネル）に基づいて
     コンテキストをプロンプトに挿入して回答を生成します。
     """
+    client = get_client(chat_request.model)
+    
     try:
         context = ""
 
@@ -76,7 +101,7 @@ async def chat_endpoint(chat_request: ChatRequest):
 
         # OpenAI GPTへのリクエスト
         response = client.chat.completions.create(
-            model="gpt-4o-mini",  # 使用するモデル
+            model=chat_request.model,  # 使用するモデル
             messages=[
                 {"role": "system", "content": "あなたは優秀な業務アシスタントAIです。"},
                 {"role": "user", "content": user_message + context}

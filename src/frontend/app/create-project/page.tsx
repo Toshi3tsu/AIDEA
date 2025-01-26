@@ -1,3 +1,4 @@
+// src/frontend/app/create-project/page.tsx
 'use client'
 
 import { useState } from 'react';
@@ -8,8 +9,13 @@ import Link from 'next/link';
 export default function CreateProject() {
   const [customerName, setCustomerName] = useState<string>('');
   const [issues, setIssues] = useState<string>('');
+  const [selectedStage, setSelectedStage] = useState<string>('営業');
+  const [selectedCategory, setSelectedCategory] = useState<string>('プロジェクト');
   const [loading, setLoading] = useState<boolean>(false);
   const router = useRouter();
+
+  const stages = ['営業', '提案', '受注', 'デリバリー中', 'クローズ'];
+  const categories = ['プロジェクト', 'ナレッジベース'];
 
   const handleCreate = async () => {
     if (!customerName || !issues) {
@@ -21,6 +27,8 @@ export default function CreateProject() {
       await axios.post('http://127.0.0.1:8000/api/projects', {
         customer_name: customerName,
         issues: issues,
+        stage: selectedStage,
+        category: selectedCategory,
       });
       alert('プロジェクトが作成されました。');
       router.push('/'); // ダッシュボードに戻る
@@ -55,6 +63,30 @@ export default function CreateProject() {
             placeholder="課題を入力"
             rows={4}
           />
+        </div>
+        <div className="mb-4">
+          <label className="block text-gray-700">フェーズ</label>
+          <select
+            value={selectedStage}
+            onChange={(e) => setSelectedStage(e.target.value)}
+            className="w-full border rounded px-3 py-2 mt-1"
+          >
+            {stages.map(stage => (
+              <option key={stage} value={stage}>{stage}</option>
+            ))}
+          </select>
+        </div>
+        <div className="mb-4">
+          <label className="block text-gray-700">カテゴリ</label>
+          <select
+            value={selectedCategory}
+            onChange={(e) => setSelectedCategory(e.target.value)}
+            className="w-full border rounded px-3 py-2 mt-1"
+          >
+            {categories.map(category => (
+              <option key={category} value={category}>{category}</option>
+            ))}
+          </select>
         </div>
         <div className="flex justify-end">
           <Link href="/">

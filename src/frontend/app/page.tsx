@@ -15,6 +15,10 @@ interface Project {
   is_archived: boolean;
   bpmn_xml: string;
   stage: string;
+  category: string;
+  slack_channel_id: string;
+  slack_tag: string;
+  box_folder_id?: string;
 }
 
 export default function Dashboard() {
@@ -26,8 +30,10 @@ export default function Dashboard() {
   const [editedCustomerName, setEditedCustomerName] = useState<string>('');
   const [editedIssues, setEditedIssues] = useState<string>('');
   const [projectStages, setProjectStages] = useState<{ [key: number]: string }>({});
+  const [selectedCategory, setSelectedCategory] = useState<string>('すべて');
 
   const stages = ['営業', '提案', '受注', 'デリバリー中', 'クローズ'];
+  const categories = ['すべて', 'プロジェクト', 'ナレッジベース'];
 
   useEffect(() => {
     fetchProjects();
@@ -63,6 +69,11 @@ export default function Dashboard() {
       setLoading(false);
     }
   };
+
+  const filteredProjects = projects.filter(project => {
+    if (selectedCategory === 'すべて') return true;
+    return project.category === selectedCategory;
+  });
 
   const handleEdit = (project: Project) => {
     setEditingProjectId(project.id);
@@ -149,6 +160,20 @@ export default function Dashboard() {
         </Link>
       </div>
 
+      <div className="mb-4">
+        <label htmlFor="category-filter" className="mr-2 font-medium text-gray-700">カテゴリでフィルタリング:</label>
+        <select
+          id="category-filter"
+          value={selectedCategory}
+          onChange={(e) => setSelectedCategory(e.target.value)}
+          className="border rounded px-2 py-1"
+        >
+          {categories.map((cat) => (
+            <option key={cat} value={cat}>{cat}</option>
+          ))}
+        </select>
+      </div>
+
       {/* フェーズごとの棒グラフ */}
       <div className="bg-white shadow rounded-lg p-4 mt-2 mb-4">
         <h2 className="text-xl font-semibold text-gray-800 mb-3">プロジェクトのステータス</h2>
@@ -195,6 +220,7 @@ export default function Dashboard() {
               <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">業種業態・担当部署</th>
               <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">目的・課題</th>
               <th className="px-4 py-3 text-center text-sm font-medium text-gray-700">フェーズ</th>
+              <th className="px-4 py-3 text-center text-sm font-medium text-gray-700">カテゴリ</th>
               <th className="px-4 py-3 text-center text-sm font-medium text-gray-700">アクション</th>
             </tr>
           </thead>
@@ -206,7 +232,7 @@ export default function Dashboard() {
                 </td>
               </tr>
             ) : (
-              projects.map((project) => (
+              filteredProjects.map((project) => (
                 <tr
                   key={project.id}
                   className="hover:bg-gray-50 transition-colors border-b"
@@ -247,6 +273,9 @@ export default function Dashboard() {
                         <option key={stage} value={stage}>{stage}</option>
                       ))}
                     </select>
+                  </td>
+                  <td className="px-4 py-3 text-center text-gray-800">
+                    {project.category}
                   </td>
                   <td className="px-4 py-3 text-center">
                     {editingProjectId === project.id ? (
@@ -296,6 +325,7 @@ export default function Dashboard() {
             <tr className="bg-gray-100 border-b">
               <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">業種業態・担当部署</th>
               <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">目的・課題</th>
+              <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">カテゴリ</th>
               <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">アクション</th>
             </tr>
           </thead>
@@ -311,6 +341,9 @@ export default function Dashboard() {
                 <tr key={project.id} className="hover:bg-gray-50 transition-colors border-b">
                   <td className="px-4 py-3 text-gray-800">{project.customer_name}</td>
                   <td className="px-4 py-3 text-gray-800">{project.issues}</td>
+                  <td className="px-4 py-3 text-center text-gray-800">
+                    {project.category}
+                  </td>
                   <td className="px-4 py-3 text-center">
                     <button
                       onClick={() => handleUnarchive(project.id)}

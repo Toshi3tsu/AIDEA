@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from typing import List
 import csv, os, datetime
 import logging
+import asyncio
 
 router = APIRouter()
 HISTORY_CSV = os.path.join(os.path.dirname(__file__), '../../../data/chat_history.csv')
@@ -29,7 +30,19 @@ initialize_csv()
 @router.post("/save", response_model=List[MessageItem])
 async def save_chat(request: SaveChatRequest):
     logging.debug(f"Received save request: {request}")
-    # 各メッセージをCSVに追加
+
+    async def write_to_csv():
+        try:
+            await asyncio.to_thread(_write_messages_to_csv, request)
+        except Exception as e:
+            logging.error(f"Failed to write to CSV: {e}")
+            raise HTTPException(status_code=500, detail="CSVへの書き込み中にエラーが発生しました。")
+
+    # 非同期に書き込み処理を実行
+    asyncio.create_task(write_to_csv())
+    return request.messages
+
+def _write_messages_to_csv(request: SaveChatRequest):
     with open(HISTORY_CSV, mode='a', newline='', encoding='utf-8') as file:
         writer = csv.DictWriter(file, fieldnames=["project_id", "session_title", "timestamp", "sender", "message"])
         for msg in request.messages:
@@ -40,7 +53,6 @@ async def save_chat(request: SaveChatRequest):
                 "sender": msg.sender,
                 "message": msg.message
             })
-    return request.messages
 
 @router.get("/history/{project_id}/{session_title}", response_model=List[MessageItem])
 async def get_chat_history(project_id: int, session_title: str):

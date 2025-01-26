@@ -6,6 +6,7 @@ import { Info } from 'lucide-react';
 import Select from 'react-select';
 import useProjectStore from '../store/projectStore';
 import useChatStore from '../store/chatStore';
+import { useModelStore } from '../store/modelStore';
 import axios from 'axios';
 
 interface ChatRecord {
@@ -14,11 +15,23 @@ interface ChatRecord {
   timestamp: string;
 }
 
+interface ModelOption {
+  value: string;
+  label: string;
+}
+
 export default function RightSidebar() {
   const { projects, selectedProject, sessionTitles, setSessionTitles, setSelectedSession, maskingEnabled, setMaskingEnabled } = useProjectStore();
   const { resetMessages, addMessage } = useChatStore();
   const [selectedSessionLocal, setSelectedSessionLocal] = useState<string | null>(null);
   const [openDropdownSession, setOpenDropdownSession] = useState<string | null>(null);
+
+  // モデル選択状態の追加
+  const modelOptions: ModelOption[] = [
+    { value: 'gpt-4o-mini', label: 'GPT-4o-mini' },
+    { value: 'deepseek-chat', label: 'DeepSeek v3' },
+  ];
+  const { selectedModel, setSelectedModel } = useModelStore();
 
   useEffect(() => {
     if (selectedProject) {
@@ -44,7 +57,9 @@ export default function RightSidebar() {
     setSelectedSession(sessionTitle);
     resetMessages();
     try {
-      const response = await axios.get<ChatRecord[]>(`http://127.0.0.1:8000/api/chat_history/history/${selectedProject?.id}/${sessionTitle}`);
+      const response = await axios.get<ChatRecord[]>(`http://127.0.0.1:8000/api/chat_history/history/${selectedProject?.id}/${sessionTitle}`, {
+        params: { model: selectedModel.value }  // モデル情報をパラメータとして送信
+      });
       response.data.forEach(record => {
         addMessage({ sender: record.sender as 'user' | 'ai', message: record.message });
       });
@@ -108,11 +123,21 @@ export default function RightSidebar() {
   };
 
   return (
-    <div className="w-64 bg-gray-50 shadow-lg flex flex-col p-4">
+    <div className="w-64 bg-gray-50 shadow-lg flex flex-col p-4 overflow-y-auto">
       {/* サイドバーヘッダー */}
       <div className="flex items-center justify-between border-b pb-4 mb-4">
         <h2 className="text-lg font-bold">チャット設定</h2>
         <Info className="h-5 w-5 text-gray-600" />
+      </div>
+
+      {/* モデル選択ドロップダウン */}
+      <div className="mb-4">
+        <h3 className="text-md font-semibold mb-2">モデル選択</h3>
+        <Select
+          options={modelOptions}
+          value={selectedModel}
+          onChange={(option) => option && setSelectedModel(option)}
+        />
       </div>
 
       {/* マスキングポップアップトグルボタン */}

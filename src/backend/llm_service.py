@@ -6,6 +6,8 @@ from dotenv import load_dotenv
 import logging
 import json
 import httpx
+import asyncio
+from typing import List, Dict
 from langsmith.wrappers import wrap_openai
 from langsmith import traceable
 
@@ -14,26 +16,126 @@ load_dotenv()
 # ログの設定
 logging.basicConfig(level=logging.DEBUG)
 
-# カスタム証明書のパス（自己署名証明書を指定）
-CUSTOM_CERT_PATH = "C:\\Users\\toshimitsu_fujiki\\OpenAI_Cato_Networks_CA.crt"
+# モデルごとの設定（証明書とAPIキー、エンドポイント）
+MODEL_CONFIG = {
+    "gpt-4o-mini": {
+        "api_key": os.getenv("OPENAI_API_KEY"),
+        "cert_path": "C:\\Users\\toshimitsu_fujiki\\OpenAI_Cato_Networks_CA.crt", # 証明書のパスを修正
+        "base_url": "https://api.openai.com/v1"
+    },
+    "deepseek-chat-v3": { # モデル名を deepseek-chat-v3 に修正
+        "api_key": os.getenv("DEEPSEEK_API_KEY"),
+        "cert_path": "C:\\Users\\toshimitsu_fujiki\\DeepSeek_CA.crt", # 証明書のパスを修正
+        "base_url": "https://api.deepseek.com/v1"
+    },
+    "perplexity": {
+        "api_key": os.getenv("PERPLEXITY_API_KEY"),
+        "cert_path": "C:\\Users\\toshimitsu_fujiki\\Perplexity_Cato_Networks_CA.crt", # 証明書のパスを修正
+        "base_url": "https://api.perplexity.ai" # Perplexity API の base URL
+    }
+}
 
-# httpxクライアントを構築
-httpx_client = httpx.Client(
-    verify=CUSTOM_CERT_PATH  # 自己署名証明書を指定
-)
+def get_client(model: str):
+    """
+    選択されたモデルに基づき、適切なAPIクライアントを返す。
+    """
+    if model not in MODEL_CONFIG:
+        raise ValueError(f"指定されたモデル '{model}' は無効です。")
 
-# OpenAIクライアントにカスタムhttpxクライアントを渡す
-api_key = os.getenv("OPENAI_API_KEY")
-if not api_key:
-    raise ValueError("APIキーが設定されていません。")
+    model_config = MODEL_CONFIG[model]
+    api_key = model_config.get("api_key")
+    cert_path = model_config.get("cert_path")
+    base_url = model_config.get("base_url")
 
-client = wrap_openai(OpenAI(api_key=api_key, http_client=httpx_client))
+    if not api_key:
+        raise ValueError(f"{model} の APIキーが設定されていません。")
+    if not cert_path:
+        raise ValueError(f"{model} の 証明書パスが設定されていません。")
+
+    httpx_client = httpx.Client(verify=cert_path)
+
+    if model in ["gpt-4o-mini", "deepseek-chat-v3"]: # OpenAI クライアントを使用するモデル
+        return wrap_openai(OpenAI(api_key=api_key, base_url=base_url, http_client=httpx_client))
+    elif model == "perplexity":
+        return wrap_openai(OpenAI(api_key=api_key, base_url=base_url, http_client=httpx_client)) # OpenAI クライアントを互換性のため使用
+
+    raise ValueError(f"モデル '{model}' のクライアント設定がありません。")
+
+async def call_llm(request: str, llm_name: str) -> str:
+    """
+    指定されたLLM APIを呼び出して応答を取得する。
+    """
+    logging.info(f"LLM '{llm_name}' を呼び出し中...")
+    try:
+        client = get_client(llm_name)
+
+        if llm_name == "gpt-4o-mini":
+            response = client.chat.completions.create(
+                model=llm_name,
+                messages=[{"role": "user", "content": request}],
+                max_tokens=4000,
+                temperature=0.5,
+            )
+            return response.choices[0].message.content.strip()
+
+        elif llm_name == "deepseek-chat-v3":
+            response = client.chat.completions.create(
+                model="deepseek-chat", # DeepSeek Chat API はモデル名を "deepseek-chat" で指定
+                messages=[{"role": "user", "content": request}],
+                max_tokens=4000,
+                temperature=0.5,
+            )
+            return response.choices[0].message.content.strip()
+
+        elif llm_name == "perplexity": # Perplexity API 呼び出し (OpenAI互換APIを使用)
+            response = client.chat.completions.create(
+                model="sonar",
+                messages=[{"role": "user", "content": request}],
+                max_tokens=4000,
+                temperature=0.5,
+            )
+            return response.choices[0].message.content.strip()
+
+        else:
+            raise ValueError(f"未対応のLLM名: {llm_name}")
+
+    except Exception as e:
+        logging.error(f"LLM '{llm_name}' の呼び出し中にエラーが発生しました: {str(e)}", exc_info=True)
+        return f"[{llm_name}] エラーが発生しました: {str(e)}"
+
+async def perform_research_with_llms(request: str, llm_enabled_states: Dict[str, bool]) -> List[str]: # llm_enabled_states を引数に追加
+    """
+    リクエスト内容とLLMの有効状態を受け取り、有効なLLMのみを使用してリサーチを実行し、それぞれの回答をリストで返す。
+    """
+    llm_names = ["gpt-4o-mini", "deepseek-chat-v3", "perplexity"]
+    llm_tasks = [] # 空のリストで初期化
+    llm_responses = ["", "", ""] # デフォルトで空のレスポンスを設定
+
+    for index, llm_name in enumerate(llm_names): # index を追加
+        if llm_enabled_states[llm_name]: # 有効な場合のみLLMを実行
+            logging.info(f"LLM '{llm_name}' は有効です。実行します。")
+            llm_tasks.append(call_llm(request, llm_name))
+        else:
+            logging.info(f"LLM '{llm_name}' は無効です。スキップします。")
+            llm_responses[index] = f"[{llm_name}] 無効に設定されているため、スキップされました。" # スキップされた旨をレスポンスに設定
+
+    if llm_tasks: # 実行するLLMがある場合のみ gather を実行
+        partial_llm_responses = await asyncio.gather(*llm_tasks)
+        response_index = 0
+        for index, llm_name in enumerate(llm_names):
+            if llm_enabled_states[llm_name]:
+                llm_responses[index] = partial_llm_responses[response_index] # gather の結果を順に格納
+                response_index += 1
+
+    return llm_responses
 
 @traceable
-def generate_bpmn_flow(customer_info: str, issues: str) -> str:
+def generate_bpmn_flow(customer_info: str, issues: str, model: str = "gpt-4o-mini") -> str:
     """
     顧客情報と課題に基づいて、BPMN XML形式の業務フローを生成します。
     """
+    client = get_client(model)
+
     prompt = f"""
     以下の顧客情報と課題に関連する、詳細な業務フローを日本語のBPMN XML形式で生成してください。
     前後の工程や関連する管理業務も含めて、包括的な業務フローを作成してください。
@@ -89,36 +191,38 @@ def generate_bpmn_flow(customer_info: str, issues: str) -> str:
     # OpenAI API 呼び出し
     logging.info("OpenAI APIにリクエストを送信中...")
     try:
+        tools=[{
+            "type": "function",
+            "function": {
+                "name": "generate_bpmn",
+                "description": "BPMN XML形式の業務フローを生成します。",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "bpmn_xml": {
+                            "type": "string",
+                            "description": "正確なBPMN XMLデータを含む文字列"
+                        }
+                    },
+                    "required": ["bpmn_xml"]
+                }
+            }
+        }]
+
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=model,
             messages=[
                 {"role": "system", "content": "あなたは、経験豊富な業務/ITコンサルタントです。"},
                 {"role": "user", "content": prompt},
             ],
-            functions=[
-                {
-                    "name": "generate_bpmn",
-                    "description": "BPMN XML形式の業務フローを生成します。",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "bpmn_xml": {
-                                "type": "string",
-                                "description": "正確なBPMN XMLデータを含む文字列"
-                            }
-                        },
-                        "required": ["bpmn_xml"]
-                    }
-                }
-            ],
-            function_call={"name": "generate_bpmn"},  # Structured Outputを利用
+            tools=tools,  # Structured Outputを利用
             max_tokens=4000,
             temperature=0.5,
         )
 
         # Structured Output解析
-        function_call = response.choices[0].message.function_call
-        arguments = function_call.arguments
+        tool_calls = response.choices[0].message.tool_calls
+        arguments = tool_calls[0].function.arguments
         
         # JSONパース
         parsed_arguments = json.loads(arguments)
@@ -134,7 +238,9 @@ def generate_bpmn_flow(customer_info: str, issues: str) -> str:
         logging.error(f"OpenAI APIエラー: {str(e)}", exc_info=True)
         raise RuntimeError(f"AI APIエラー: {str(e)}")
 
-def analyze_business_flow(business_flow: str, issues: str) -> str:
+def analyze_business_flow(business_flow: str, issues: str, model: str = "gpt-4o-mini") -> str:
+    client = get_client(model)
+
     prompt = f"""
     業務フローと現状の課題を以下に示します。
 
@@ -149,7 +255,7 @@ def analyze_business_flow(business_flow: str, issues: str) -> str:
 
     try:
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=model,
             messages=[
                 {"role": "system", "content": "あなたはビジネスコンサルタントです。"},
                 {"role": "user", "content": prompt}
@@ -163,7 +269,9 @@ def analyze_business_flow(business_flow: str, issues: str) -> str:
         raise RuntimeError(f"AI APIエラー: {str(e)}")
 
 @traceable
-def generate_requirements(customer_info: str, issues: str) -> list:
+def generate_requirements(customer_info: str, issues: str, model: str = "gpt-4o-mini") -> list:
+    client = get_client(model)
+
     """
     顧客情報と課題に基づいて、ソリューションに必要な機能要件を生成します。
     機能要件はリスト形式で返されます。
@@ -181,37 +289,40 @@ def generate_requirements(customer_info: str, issues: str) -> list:
     機能要件を箇条書き形式でリストアップしてください。
     """
     try:
+        tools=[{
+            "type": "function",
+            "function": {
+                "name": "generate_requirements_list",
+                "description": "要件のリストを生成します。",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "requirements": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "生成された要件を含むリスト"
+                        }
+                    },
+                    "required": ["requirements"]
+                }
+            }
+        }]
+
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=model,
             messages=[
                 {"role": "system", "content": "あなたは優秀な業務・ITコンサルタントです。付加価値労働生産性の向上を目的に、ソリューションの導入を行い、業務を改善します。"},
                 {"role": "user", "content": prompt}
             ],
-            functions=[
-                {
-                    "name": "generate_requirements_list",
-                    "description": "要件のリストを生成します。",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "requirements": {
-                                "type": "array",
-                                "items": {"type": "string"},
-                                "description": "生成された要件を含むリスト"
-                            }
-                        },
-                        "required": ["requirements"]
-                    }
-                }
-            ],
-            function_call={"name": "generate_requirements_list"},
+            tools=tools,
             max_tokens=1000,
             temperature=0,
         )
 
         # Structured Output解析
-        function_call = response.choices[0].message.function_call
-        arguments = function_call.arguments
+        tool_calls = response.choices[0].message.tool_calls
+        
+        arguments = tool_calls[0].function.arguments
 
         # JSONパース
         parsed_arguments = json.loads(arguments)
@@ -228,7 +339,9 @@ def generate_requirements(customer_info: str, issues: str) -> list:
         logging.error(f"OpenAI APIエラー: {str(e)}", exc_info=True)
         raise RuntimeError(f"AI APIエラー: {str(e)}")
 
-def evaluate_solutions(evaluation: str) -> str:
+def evaluate_solutions(evaluation: str, model: str = "gpt-4o-mini") -> str:
+    client = get_client(model)
+
     prompt = f"""
     以下の評価基準に基づいて、ソリューションの評価と最適な組み合わせを提案してください。
 
@@ -245,7 +358,7 @@ def evaluate_solutions(evaluation: str) -> str:
 
     try:
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=model,
             messages=[
                 {"role": "system", "content": "あなたはビジネスアナリストです。"},
                 {"role": "user", "content": prompt}
@@ -258,7 +371,9 @@ def evaluate_solutions(evaluation: str) -> str:
     except Exception as e:
         raise RuntimeError(f"AI APIエラー: {str(e)}")
 
-def generate_proposal(customer_info: str, project_info: str, solution_details: str) -> str:
+def generate_proposal(customer_info: str, project_info: str, solution_details: str, model: str = "gpt-4o-mini") -> str:
+    client = get_client(model)
+
     """
     顧客情報、プロジェクト情報、およびソリューションの詳細に基づいて提案を生成します。
     """
@@ -276,7 +391,7 @@ def generate_proposal(customer_info: str, project_info: str, solution_details: s
     """
     try:
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=model,
             messages=[
                 {"role": "system", "content": "あなたはビジネス提案を作成する専門家です。"},
                 {"role": "user", "content": prompt},

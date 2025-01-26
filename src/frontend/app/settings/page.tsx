@@ -14,8 +14,13 @@ interface Project {
   id: number;
   customer_name: string;
   issues: string;
-  has_flow_flag: boolean;
+  is_archived: boolean;
   bpmn_xml: string;
+  stage: string;
+  category: string;
+  slack_channel_id: string;
+  slack_tag: string;
+  box_folder_id?: string;
 }
 
 interface SlackChannel {
@@ -26,6 +31,11 @@ interface SlackChannel {
 interface ProjectSlackLink {
   project_id: number;
   slack_channel_id: string;
+}
+
+interface BoxFolderInfo {
+  id: string;
+  name: string;
 }
 
 interface UploadedFile {
@@ -44,6 +54,7 @@ export default function Settings() {
   const { generatedFlow, setGeneratedFlow } = useFlowStore();
   const { projects, setProjects, slackChannels, setSlackChannels, 
     connectedSlackChannels, setConnectedSlackChannels, projectFiles, setProjectFiles, } = useProjectStore();
+  const [boxFolderInfos, setBoxFolderInfos] = useState<{ [projectId: number]: BoxFolderInfo | null }>({});
   const [uploadProgress, setUploadProgress] = useState<{ [key: number]: number }>({});
   const [searchTerm, setSearchTerm] = useState('');
   const [editingSolution, setEditingSolution] = useState(null);
@@ -126,6 +137,36 @@ export default function Settings() {
     }
   };
 
+  const handleConnectBox = async (projectId: number) => {
+    const folderId = prompt('連携するBoxフォルダIDを入力してください:');
+    if (!folderId) return;
+
+    try {
+      // box.pyの PUT /api/box/connect/:project_id を呼び出す
+      await axios.put(`http://127.0.0.1:8000/api/box/connect/${projectId}`, {
+        folder_id: folderId,
+      });
+      alert('Boxフォルダがプロジェクトに連携されました。');
+      fetchProjects(); // 再度プロジェクト一覧を取得して最新状態を反映
+    } catch (error) {
+      console.error('Error connecting Box folder:', error);
+      alert('Boxフォルダの連携に失敗しました。');
+    }
+  };
+
+  const handleDisconnectBox = async (projectId: number) => {
+    if (!confirm('このプロジェクトからBoxフォルダを切断しますか？')) return;
+    try {
+      // box.pyの DELETE /api/box/disconnect/:project_id を呼び出す
+      await axios.delete(`http://127.0.0.1:8000/api/box/disconnect/${projectId}`);
+      alert('Boxフォルダがプロジェクトから切断されました。');
+      fetchProjects();
+    } catch (error) {
+      console.error('Error disconnecting Box folder:', error);
+      alert('Boxフォルダの切断に失敗しました。');
+    }
+  };
+
   useEffect(() => {
     const initialize = async () => {
       await initializeMsal();
@@ -156,6 +197,28 @@ export default function Settings() {
     fetchSlackChannels();
     fetchConnectedSlackChannels();
   }, []);
+
+  // プロジェクト一覧を取得した後、Boxフォルダ情報を取得する
+  useEffect(() => {
+    async function fetchFolderInfo(project: Project) {
+      if (project.box_folder_id) {
+        try {
+          const response = await axios.get<BoxFolderInfo>(`http://127.0.0.1:8000/api/box/folders/${project.box_folder_id}`);
+          setBoxFolderInfos(prev => ({ ...prev, [project.id]: response.data }));
+        } catch (error) {
+          console.error(`Error fetching folder info for project ${project.id}:`, error);
+          setBoxFolderInfos(prev => ({ ...prev, [project.id]: null }));
+        }
+      }
+    }
+
+    // プロジェクト一覧取得後に各プロジェクトのフォルダ情報を取得
+    projects.forEach(project => {
+      if (project.box_folder_id) {
+        fetchFolderInfo(project);
+      }
+    });
+  }, [projects]);
 
   const fetchProjects = async () => {
     try {
@@ -301,28 +364,30 @@ export default function Settings() {
   };
 
   const handleConnectSlack = async (projectId: number) => {
-    const slackChannelId = prompt('Enter Slack Channel ID to connect:');
+    const slackChannelId = prompt('連携するSlackチャンネルのIDを入力してください:');
     if (!slackChannelId) return;
 
+    const tag = prompt('このチャンネルに関連するタグを入力してください:') || "";
+
     try {
-      const response = await axios.post<ProjectSlackLink>('http://127.0.0.1:8000/api/slack/connect-slack', {
-        project_id: projectId,
-        slack_channel_id: slackChannelId,
+      await axios.put(`http://127.0.0.1:8000/api/projects/${projectId}/slack`, {
+        channel_id: slackChannelId,
+        tag: tag
       });
-      setConnectedSlackChannels([...connectedSlackChannels, response.data]);
       alert('Slackチャンネルがプロジェクトに連携されました。');
+      fetchProjects(); // 更新されたCSVを再取得して反映
     } catch (error) {
       console.error('Error connecting Slack channel:', error);
-      // alert('Slackチャンネルの連携に失敗しました。');
+      alert('Slackチャンネルの連携に失敗しました。');
     }
   };
 
   const handleDisconnectSlack = async (projectId: number) => {
     if (!confirm('このプロジェクトからSlackチャンネルを切断しますか？')) return;
     try {
-      await axios.delete(`http://127.0.0.1:8000/api/slack/disconnect-slack/${projectId}`);
-      setConnectedSlackChannels(connectedSlackChannels.filter((link) => link.project_id !== projectId));
+      await axios.delete(`http://127.0.0.1:8000/api/projects/${projectId}/slack`);
       alert('Slackチャンネルがプロジェクトから切断されました。');
+      fetchProjects();
     } catch (error) {
       console.error('Error disconnecting Slack channel:', error);
       alert('Slackチャンネルの切断に失敗しました。');
@@ -379,33 +444,101 @@ export default function Settings() {
                 <tr>
                   <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">プロジェクト名</th>
                   <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Slack</th>
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">タグ</th>
                   <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Planner</th>
-                  <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">ファイル数</th>
-                  <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">アクション</th>
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Box Folder</th>
+                  <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">ファイル</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {projects.map((project) => {
                   const linkedSlack = connectedSlackChannels.find((link) => link.project_id === project.id);
-                  const slackChannel = slackChannels.find((channel) => channel.id === linkedSlack?.slack_channel_id);
+                  const slackChannel = slackChannels.find((channel) => channel.id === project.slack_channel_id);
                   const files = projectFiles[project.id] || [];
                   const groupId = groupLinks[project.id];
+                  const slackTag = project.slack_tag || "";
+                  const folderInfo = boxFolderInfos[project.id];
+                  const folderDisplayName = folderInfo ? folderInfo.name : project.box_folder_id || "未連携";
 
                   return (
                     <tr key={project.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-4 py-3 text-gray-800">{project.customer_name}</td>
+                      {/* Slackチャンネル */}
                       <td className="px-4 py-3 text-gray-800">
                         {slackChannel ? (
-                          slackChannel.name
+                          <div className="flex items-center space-x-2">
+                            <span>{slackChannel.name}</span>
+                            <button
+                              onClick={() => handleConnectSlack(project.id)}
+                              className="text-blue-500 hover:text-blue-700"
+                            >
+                              変更
+                            </button>
+                            <button
+                              onClick={() => handleDisconnectSlack(project.id)}
+                              className="text-red-500 hover:text-red-700"
+                            >
+                              解除
+                            </button>
+                          </div>
                         ) : (
                           <button
-                            onClick={() => {/* Slack連携の処理 */}}
+                            onClick={() => handleConnectSlack(project.id)}
                             className="text-blue-500 hover:text-blue-700"
                           >
                             チャンネル連携
                           </button>
                         )}
                       </td>
+                      {/* Slackタグ */}
+                      <td className="px-4 py-3 text-gray-800">
+                        {project.slack_tag ? (
+                          <div className="flex items-center space-x-2">
+                            <span>{project.slack_tag}</span>
+                            <button
+                              onClick={async () => {
+                                const newTag = prompt('新しいタグを入力してください:', project.slack_tag);
+                                if (newTag !== null) {
+                                  try {
+                                    // Slackチャンネルとタグを更新（変更可能なAPIエンドポイントを使用）
+                                    await axios.put(`http://127.0.0.1:8000/api/projects/${project.id}/slack`, {
+                                      channel_id: project.slack_channel_id,
+                                      tag: newTag
+                                    });
+                                    alert('タグが更新されました。');
+                                    fetchProjects();
+                                  } catch (error) {
+                                    console.error('Error updating tag:', error);
+                                    alert('タグの更新に失敗しました。');
+                                  }
+                                }
+                              }}
+                              className="text-blue-500 hover:text-blue-700 text-sm"
+                            >
+                              変更
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={async () => {
+                              const newTag = prompt('新しいタグを入力してください:');
+                              if (newTag !== null) {
+                                try {
+                                  // Slackチャンネル未登録状態でタグ追加はできない前提（またはチャンネル登録済みでないとタグ変更できない場合）
+                                  alert('チャンネルが未登録です。まずチャンネルを登録してください。');
+                                } catch (error) {
+                                  console.error('Error setting tag:', error);
+                                  alert('タグの設定に失敗しました。');
+                                }
+                              }
+                            }}
+                            className="text-blue-500 hover:text-blue-700"
+                          >
+                            タグ登録
+                          </button>
+                        )}
+                      </td>
+                      {/* Planner */}
                       <td className="px-4 py-3 text-gray-800">
                         {groupId ? (
                           <span>{groupId}</span>
@@ -418,82 +551,100 @@ export default function Settings() {
                           </button>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-center text-gray-800">{files.length}</td>
+                      {/* Boxフォルダ連携 */}
+                      <td className="px-4 py-3 text-gray-800">
+                        {project.box_folder_id ? (
+                          <div className="flex items-center space-x-2">
+                            <span>{folderDisplayName}</span>
+                            <button
+                              onClick={() => handleConnectBox(project.id)}
+                              className="text-blue-500 hover:text-blue-700"
+                            >
+                              変更
+                            </button>
+                            <button
+                              onClick={() => handleDisconnectBox(project.id)}
+                              className="text-red-500 hover:text-red-700"
+                            >
+                              解除
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => handleConnectBox(project.id)}
+                            className="text-blue-500 hover:text-blue-700"
+                          >
+                            フォルダ連携
+                          </button>
+                        )}
+                      </td>
+                      {/* ファイル一覧 */}
                       <td className="px-4 py-3 text-center">
-                        {/* 既存のファイル管理アクション UI */}
-                        <div className="flex justify-center items-center space-x-2">
-                          <details className="group relative">
-                            <summary className="cursor-pointer text-gray-600 hover:text-gray-800">
-                              {files.length > 0 ? `${files.length} ファイル` : 'ファイルなし'}
-                            </summary>
-                            <div className="absolute left-0 mt-2 w-64 bg-white border border-gray-200 rounded shadow-lg z-10">
-                              {files.length > 0 && (
-                                <ul className="max-h-40 overflow-y-auto">
-                                  {files.map((file) => (
-                                    <li key={file.filename} className="flex justify-between items-center px-4 py-2 hover:bg-gray-100">
-                                      <span className="text-sm">{file.filename}</span>
-                                      <div className="flex space-x-1">
-                                        <button
-                                          onClick={() => {/* ダウンロード処理 */}}
-                                          className="text-[#173241] hover:text-green-700"
-                                          title="ダウンロード"
-                                        >
-                                          <Download className="h-4 w-4" />
-                                        </button>
-                                        <button
-                                          onClick={() => {/* 削除処理 */}}
-                                          className="text-red-500 hover:text-red-700"
-                                          title="削除"
-                                        >
-                                          <Trash2 className="h-4 w-4" />
-                                        </button>
-                                      </div>
-                                    </li>
-                                  ))}
-                                </ul>
-                              )}
-                              {/* ファイルアップロードフォーム */}
-                              <form
-                                onSubmit={(e) => {
-                                  e.preventDefault();
-                                  const target = e.target as typeof e.target & {
-                                    file: { files: FileList };
-                                  };
-                                  const file = target.file.files[0];
-                                  if (file) {
-                                    // ファイルアップロードの処理
-                                  }
-                                }}
-                                className="px-4 py-2 border-t border-gray-200"
-                              >
-                                <div className="flex items-center space-x-2">
-                                  <label
-                                    htmlFor={`file-input-${project.id}`}
-                                    className="cursor-pointer bg-gray-200 text-gray-700 px-2 py-1 rounded hover:bg-gray-300 text-xs"
-                                  >
-                                    ファイル追加
-                                  </label>
-                                  <input
-                                    type="file"
-                                    name="file"
-                                    id={`file-input-${project.id}`}
-                                    className="hidden"
-                                    accept=".txt,.docx"
-                                    onChange={(e) => {
-                                      const file = e.target.files?.[0];
-                                      if (file) {
-                                        // ファイルアップロードの処理
-                                      }
-                                    }}
-                                  />
-                                  {uploadProgress[project.id] > 0 && (
-                                    <span className="text-xs text-gray-600">{uploadProgress[project.id]}%</span>
-                                  )}
-                                </div>
-                              </form>
-                            </div>
-                          </details>
-                        </div>
+                        <details className="group relative">
+                          <summary className="cursor-pointer text-gray-600 hover:text-gray-800">
+                            {files.length > 0 ? `${files.length} ファイル` : 'ファイルなし'}
+                          </summary>
+                          <div className="absolute left-0 mt-2 w-64 bg-white border border-gray-200 rounded shadow-lg z-10">
+                            {files.length > 0 && (
+                              <ul className="max-h-40 overflow-y-auto">
+                                {files.map((file) => (
+                                  <li key={file.filename} className="flex justify-between items-center px-4 py-2 hover:bg-gray-100">
+                                    <span className="text-sm">{file.filename}</span>
+                                    <div className="flex space-x-1">
+                                      <button
+                                        onClick={() => handleDownloadFile(project.id, file.filename)}
+                                        className="text-[#173241] hover:text-green-700"
+                                        title="ダウンロード"
+                                      >
+                                        <Download className="h-4 w-4" />
+                                      </button>
+                                      <button
+                                        onClick={() => handleDeleteFile(project.id, file.filename)}
+                                        className="text-red-500 hover:text-red-700"
+                                        title="削除"
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </button>
+                                    </div>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                            {/* ファイルアップロードフォームをここに配置 */}
+                            <form
+                              onSubmit={(e) => {
+                                e.preventDefault();
+                                const target = e.target as typeof e.target & {
+                                  file: { files: FileList };
+                                };
+                                const file = target.file.files[0];
+                                if (file) {
+                                  handleFileUpload(project.id, file);
+                                }
+                              }}
+                              className="px-4 py-2 border-t border-gray-200"
+                            >
+                              <div className="flex items-center space-x-2">
+                                <label
+                                  htmlFor={`file-input-${project.id}`}
+                                  className="cursor-pointer bg-gray-200 text-gray-700 px-2 py-1 rounded hover:bg-gray-300 text-xs"
+                                >
+                                  ファイル追加
+                                </label>
+                                <input
+                                  type="file"
+                                  name="file"
+                                  id={`file-input-${project.id}`}
+                                  className="hidden"
+                                  accept=".txt,.docx"
+                                />
+                                {uploadProgress[project.id] > 0 && (
+                                  <span className="text-xs text-gray-600">{uploadProgress[project.id]}%</span>
+                                )}
+                              </div>
+                            </form>
+                          </div>
+                        </details>
                       </td>
                     </tr>
                   );

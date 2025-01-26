@@ -2,6 +2,8 @@
 'use client';
 
 import React, { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import useProjectStore from '../store/projectStore';
 
 interface Task {
   title: string;
@@ -15,23 +17,27 @@ interface TaskExtractionModalProps {
   documentText: string;
   extractedTasks: Task[];
   onCancel: () => void;
-  onTaskLink: (tasks: Task[]) => void;
-  // タスク修正やタグの変更のためのコールバックも必要に応じて追加
 }
 
 const TaskExtractionModal: React.FC<TaskExtractionModalProps> = ({
   documentText,
   extractedTasks,
-  onCancel,
-  onTaskLink,
+  onCancel
 }) => {
   const [tasks, setTasks] = useState<Task[]>(extractedTasks);
+  const { setExtractedTasks } = useProjectStore();
+  const router = useRouter();
 
   // タグの変更などを行う関数を実装
   const handleTagChange = (index: number, newTag: Task['tag']) => {
     const updatedTasks = [...tasks];
     updatedTasks[index].tag = newTag;
     setTasks(updatedTasks);
+  };
+
+  const handleTaskLink = () => {
+    setExtractedTasks(tasks);
+    router.push('/project-management');
   };
 
   return (
@@ -78,7 +84,7 @@ const TaskExtractionModal: React.FC<TaskExtractionModalProps> = ({
             {/* タスクの紐づけボタン */}
             <button
               className="mt-4 px-4 py-2 bg-[#173241] text-white rounded hover:bg-[#0F2835]"
-              onClick={() => onTaskLink(tasks)}
+              onClick={handleTaskLink}
             >
               タスクの紐づけ
             </button>

@@ -2,13 +2,12 @@
 'use client'
 
 import { useReducer, useEffect, useState } from 'react';
-import { RefreshCw } from 'lucide-react';
-import RightSidebar from '../components/RightSidebar';
+import { Download, Trash } from 'lucide-react';
 import BpmnViewer from './BpmnViewer';
 import useFlowStore from '../store/flowStore';
 import useProjectStore from '../store/projectStore';
+import { useModelStore } from '../store/modelStore';
 import axios from 'axios';
-import Select from 'react-select';
 
 interface Solution {
   id: string;
@@ -115,7 +114,7 @@ function reducer(state: State, action: Action): State {
 
 export default function Generate() {
   const [state, dispatch] = useReducer(reducer, initialState);
-  const { generatedFlow, setGeneratedFlow } = useFlowStore();
+  const { generatedFlow, setGeneratedFlow, resetFlow } = useFlowStore();
   const [projects, setProjects] = useState<Project[]>([]);
   const { selectedProject, setSelectedProject } = useProjectStore();
   const [loadingProjects, setLoadingProjects] = useState<boolean>(true);
@@ -165,10 +164,12 @@ export default function Generate() {
 
   const handleGenerateRequirements = async () => {
     dispatch({ type: 'SET_LOADING', payload: true });
+    const { selectedModel } = useModelStore.getState();
     try {
       const response = await axios.post('http://127.0.0.1:8000/api/ai/generate-requirements', {
         customer_info: state.customerInfo,
         issues: state.issues,
+        model: selectedModel.value
       });
       const requirements = response.data.response;
       dispatch({ type: 'SET_SOLUTION_REQUIREMENTS', payload: requirements });
@@ -186,6 +187,7 @@ export default function Generate() {
   };
 
   const handleGenerateFlow = async () => {
+    const { selectedModel } = useModelStore.getState();
     if (!selectedProject) {
       alert('プロジェクトを選択してください。');
       return;
@@ -196,6 +198,7 @@ export default function Generate() {
       const response = await axios.post('http://127.0.0.1:8000/api/ai/generate-flow', { 
         customer_info: state.customerInfo,
         issues: state.issues,
+        model: selectedModel.value,
       });
       const cleanedFlow = response.data.flow.trim();
       dispatch({ type: 'SET_GENERATED_FLOW', payload: cleanedFlow });
@@ -215,6 +218,30 @@ export default function Generate() {
     }
   };
 
+  const handleDeleteFlow = async () => {
+    if (!selectedProject) {
+      alert('プロジェクトを選択してください。');
+      return;
+    }
+    if (!window.confirm('業務フローを削除してもよろしいですか？')) {
+      return; // 確認ダイアログでキャンセルが選択された場合
+    }
+
+    dispatch({ type: 'SET_LOADING', payload: true });
+    try {
+      await axios.delete(`http://127.0.0.1:8000/api/projects/${selectedProject.id}/flow`);
+      dispatch({ type: 'SET_GENERATED_FLOW', payload: '' }); // フロントエンドの状態を更新
+      setGeneratedFlow(''); // zustandの状態も更新
+      alert('業務フローを削除しました。');
+      fetchProjects(); // プロジェクトリストを再取得してUIを更新
+    } catch (error) {
+      console.error('Error deleting flow:', error);
+      alert('業務フローの削除に失敗しました。');
+    } finally {
+      dispatch({ type: 'SET_LOADING', payload: false });
+    }
+  };
+
   const handleSolutionChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const selectedId = e.target.value;
     dispatch({ type: 'SET_SELECTED_SOLUTION', payload: selectedId });
@@ -227,6 +254,7 @@ export default function Generate() {
   };
 
   const handleGenerateProposal = async () => {
+    const { selectedModel } = useModelStore.getState();
     if (!selectedProject) {
       alert('プロジェクトを選択してください。');
       return;
@@ -238,6 +266,7 @@ export default function Generate() {
         customer_info: state.customerInfo,
         project_info: state.issues,
         solution_id: state.selectedSolution,
+        model: selectedModel.value,
       });
       dispatch({ type: 'SET_OUTPUT', payload: response.data.content || 'No output received' });
       dispatch({ type: 'NEXT_STEP' });
@@ -252,6 +281,7 @@ export default function Generate() {
   };
 
   const handleEvaluateSolutions = async () => {
+    const { selectedModel } = useModelStore.getState();
     if (!selectedProject) {
       alert('プロジェクトを選択してください。');
       return;
@@ -261,6 +291,7 @@ export default function Generate() {
     try {
       const response = await axios.post('http://127.0.0.1:8000/api/ai/evaluate-solutions', {
         evaluation: state.evaluation,
+        model: selectedModel.value,
       });
       dispatch({ type: 'SET_COMBINATION', payload: response.data.combination });
       alert('ソリューションが評価されました。');
@@ -274,7 +305,7 @@ export default function Generate() {
 
   const handleReset = () => {
     dispatch({ type: 'RESET' });
-    useFlowStore.getState().resetFlow();
+    resetFlow();
     setSelectedProject(null);
     fetchProjects();
   };
@@ -339,6 +370,39 @@ export default function Generate() {
       {/* タイトルとプロジェクト選択 */}
       <div className="flex justify-between items-center mb-2">
         <h1 className="text-3xl font-bold text-gray-800">コンサルティングAI</h1>
+        {/* 提案書を作成 ボタンを追加 */}
+        {selectedProject && state.currentStep >= 1 && ( // final step のみ表示などの条件を追加しても良い
+          <button
+            onClick={async () => {
+              if (!selectedProject) return;
+              dispatch({ type: 'SET_LOADING', payload: true });
+              try {
+                const response = await axios.get(`http://127.0.0.1:8000/api/projects/${selectedProject.id}/proposal`, { // 提案書APIエンドポイントを呼び出す
+                  responseType: 'blob',
+                });
+                const blob = new Blob([response.data], { type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `project_${selectedProject.id}_proposal.pptx`; // 提案書用のファイル名
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+                alert('提案書PowerPointファイルのダウンロードを開始します。');
+              } catch (error) {
+                console.error('提案書PowerPoint export error:', error);
+                alert('提案書PowerPointファイルのエクスポートに失敗しました。');
+              } finally {
+                dispatch({ type: 'SET_LOADING', payload: false });
+              }
+            }}
+            className="bg-[#173241] hover:bg-[#0F2835] text-white font-bold py-2 px-4 rounded ml-4" // スタイルは調整してください
+            disabled={state.loading}
+          >
+            提案書を作成
+          </button>
+        )}
       </div>
 
       {/* プロジェクトが選択されていない場合のUI */}
@@ -395,7 +459,53 @@ export default function Generate() {
           </div>
 
           {/* 業務フロー表示 */}
-          <BpmnViewer xml={state.generatedFlow} projectId={selectedProject.id.toString()} />
+          <div className="relative"> {/* 相対配置のコンテナを追加 */}
+            <BpmnViewer xml={state.generatedFlow} projectId={selectedProject.id.toString()} />
+            {/* 削除ボタンを絶対配置 */}
+            <button
+              onClick={handleDeleteFlow}
+              className="absolute top-2 right-2 bg-[#BF4242] hover:bg-[#A53939] text-white font-bold py-2 px-2 rounded-full shadow"
+            >
+              <Trash size={16} /> {/* Trashアイコン */}
+            </button>
+            {/* PowerPoint 出力ボタンを削除ボタンの下に追加 */}
+            <button
+                onClick={async () => {
+                    if (!selectedProject) return;
+                    dispatch({ type: 'SET_LOADING', payload: true }); // ローディング開始
+                    try {
+                        const response = await axios.get(`http://127.0.0.1:8000/api/projects/${selectedProject.id}/powerpoint`, {
+                            responseType: 'blob', // Blobとしてレスポンスを受け取る
+                        });
+                        const blob = new Blob([response.data], { type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' });
+                        const url = window.URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `project_${selectedProject.id}_flow_objects.pptx`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        window.URL.revokeObjectURL(url);
+                        alert('PowerPointファイルのダウンロードを開始します。');
+                    } catch (error) {
+                        console.error('PowerPoint export error:', error);
+                        alert('PowerPointファイルのエクスポートに失敗しました。');
+                    } finally {
+                        dispatch({ type: 'SET_LOADING', payload: false }); // ローディング終了
+                    }
+                }}
+                className="absolute top-12 right-2 bg-[#173241] hover:bg-[#0F2835] text-white font-bold py-2 px-2 rounded-full shadow"
+                disabled={state.loading} // ローディング中はボタンをdisabledにする
+            >
+                {state.loading ? (
+                    '生成中...'
+                ) : (
+                    <>
+                        <Download size={16} /> {/* ダウンロードアイコン */}
+                    </>
+                )}
+            </button>
+          </div>
         </div>
       )}
     </div>
@@ -608,7 +718,7 @@ const Step3 = ({
       </button>
       <button
         onClick={handleGenerateProposal}
-        className="px-4 py-2 bg-[#BF4242] text-white rounded"
+        className="px-4 py-2 bg-[#BF4242] text-white font-bold rounded"
         disabled={!combination || loading}
       >
         {loading ? '生成中...' : '提案を生成'}
