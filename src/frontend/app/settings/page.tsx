@@ -2,13 +2,13 @@
 'use client'
 
 import { useState, useEffect } from 'react';
-import { Upload, Edit2, Trash2, Search, Download } from 'lucide-react';
+import { Upload, Edit2, Trash2, Search, Download, Settings as SettingsIcon, ChevronUp, ChevronDown } from 'lucide-react';
 import useFlowStore from '../store/flowStore';
 import useProjectStore from '../store/projectStore';
 import axios from 'axios';
-import Select from 'react-select';
-import { FaRobot, FaUser } from 'react-icons/fa';
 import msalInstance from '../config/msalInstance';
+import ReactDOM from 'react-dom/client';
+import ProjectList from '../components/ProjectList';
 
 interface Project {
   id: number;
@@ -20,7 +20,8 @@ interface Project {
   category: string;
   slack_channel_id: string;
   slack_tag: string;
-  box_folder_id?: string;
+  box_folder_path: string;
+  schedule: string;
 }
 
 interface SlackChannel {
@@ -50,7 +51,16 @@ interface SelectionOption {
   type: 'file' | 'slack';
 }
 
-export default function Settings() {
+export default function SettingsPage() {
+  useEffect(() => {
+    document.querySelector('.page-title')!.textContent = '設定';
+    const iconContainer = document.querySelector('.page-icon')!;
+    iconContainer.innerHTML = '';
+    const icon = document.createElement('div');
+    const root = ReactDOM.createRoot(icon);
+    root.render(<SettingsIcon className="h-5 w-5" />);
+    iconContainer.appendChild(icon);
+  }, []);
   const { generatedFlow, setGeneratedFlow } = useFlowStore();
   const { projects, setProjects, slackChannels, setSlackChannels, 
     connectedSlackChannels, setConnectedSlackChannels, projectFiles, setProjectFiles, } = useProjectStore();
@@ -58,10 +68,92 @@ export default function Settings() {
   const [uploadProgress, setUploadProgress] = useState<{ [key: number]: number }>({});
   const [searchTerm, setSearchTerm] = useState('');
   const [editingSolution, setEditingSolution] = useState(null);
-  const [activeTab, setActiveTab] = useState<'fileApi' | 'solution' | 'masking'>('fileApi');
+  const [activeTab, setActiveTab] = useState<'fileApi' | 'solution' | 'masking' | 'projectList' | 'newsKeywords'>('fileApi');
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [isMsalInitialized, setIsMsalInitialized] = useState(false);
   const [groupLinks, setGroupLinks] = useState<{ [projectId: number]: string }>({});
+  const [solutions, setSolutions] = useState<any[]>([]);
+  const [newsKeywords, setNewsKeywords] = useState<string[]>([]); // 初期値を空の配列に変更
+  const [newKeyword, setNewKeyword] = useState('');
+  const [isPathModalOpen, setIsPathModalOpen] = useState(false);
+  const [relativePath, setRelativePath] = useState('');
+  const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
+
+  // 新たに追加: グローバルベースディレクトリの状態
+  const [baseDirectory, setBaseDirectory] = useState<string>('');
+  const [isBaseDirModalOpen, setIsBaseDirModalOpen] = useState<boolean>(false);
+  const [newBaseDirectoryInput, setNewBaseDirectoryInput] = useState<string>('');
+
+  const fetchProjects = async () => {
+    try {
+      const response = await axios.get<Project[]>('http://127.0.0.1:8000/api/projects');
+      setProjects(response.data);
+    } catch (error) {
+      console.error('Error fetching projects:', error);
+      alert('プロジェクトの取得に失敗しました。');
+    }
+  };
+
+  useEffect(() => {
+    const fetchInitialKeywords = async () => {
+      try {
+        const response = await axios.get<string[]>('http://127.0.0.1:8000/api/news/keywords');
+        setNewsKeywords(response.data);
+      } catch (error) {
+        console.error('Failed to fetch keywords:', error);
+        // APIからの取得に失敗した場合、ローカルストレージから読み込むか、初期値を設定
+        const storedKeywords = localStorage.getItem('newsKeywords');
+        if (storedKeywords) {
+          setNewsKeywords(JSON.parse(storedKeywords));
+        } else {
+          setNewsKeywords(['DX']); // ローカルストレージにもない場合は初期値を設定
+        }
+      }
+    };
+
+    fetchInitialKeywords();
+    fetchProjects();
+
+    // グローバルベースディレクトリを取得
+    const fetchBaseDirectory = async () => {
+      try {
+        const response = await axios.get<{ box_base_directory: string }>('http://127.0.0.1:8000/api/box/base-directory');
+        setBaseDirectory(response.data.box_base_directory);
+      } catch (error) {
+        console.error('Failed to fetch base directory:', error);
+        setBaseDirectory('');
+      }
+    };
+
+    fetchBaseDirectory();
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('newsKeywords', JSON.stringify(newsKeywords));
+  }, [newsKeywords]);
+
+  const handleAddKeyword = async () => {
+    if (newKeyword && !newsKeywords.includes(newKeyword)) {
+      const updatedKeywords = [...newsKeywords, newKeyword];
+      try {
+        await axios.post('http://127.0.0.1:8000/api/news/keywords', updatedKeywords);
+        setNewsKeywords(updatedKeywords);
+        setNewKeyword('');
+      } catch (error) {
+        console.error('Failed to add keyword:', error);
+      }
+    }
+  };
+
+  const handleDeleteKeyword = async (keywordToDelete: string) => {
+    const updatedKeywords = newsKeywords.filter(keyword => keyword !== keywordToDelete);
+    try {
+      await axios.post('http://127.0.0.1:8000/api/news/keywords', updatedKeywords);
+      setNewsKeywords(updatedKeywords);
+    } catch (error) {
+      console.error('Failed to delete keyword:', error);
+    }
+  };
 
   const initializeMsal = async () => {
     try {
@@ -137,21 +229,40 @@ export default function Settings() {
     }
   };
 
-  const handleConnectBox = async (projectId: number) => {
-    const folderId = prompt('連携するBoxフォルダIDを入力してください:');
-    if (!folderId) return;
+  const handleSetRelativePath = async () => {
+    if (selectedProjectId === null) return;
+    if (!relativePath) {
+      alert('相対パスを入力してください。');
+      return;
+    }
+    // ベースディレクトリが設定されているか確認
+    if (!baseDirectory) {
+      alert('ベースディレクトリが設定されていません。');
+      return;
+    }
 
     try {
-      // box.pyの PUT /api/box/connect/:project_id を呼び出す
-      await axios.put(`http://127.0.0.1:8000/api/box/connect/${projectId}`, {
-        folder_id: folderId,
+      await axios.put(`http://127.0.0.1:8000/api/box/connect/${selectedProjectId}`, {
+        folder_path: relativePath,
       });
-      alert('Boxフォルダがプロジェクトに連携されました。');
-      fetchProjects(); // 再度プロジェクト一覧を取得して最新状態を反映
+      alert(`Boxフォルダ「${baseDirectory}/${relativePath}」がプロジェクトに連携されました。`);
+      setIsPathModalOpen(false);
+      setRelativePath('');
+      await fetchProjects();
     } catch (error) {
-      console.error('Error connecting Box folder:', error);
-      alert('Boxフォルダの連携に失敗しました。');
+      console.error("Error setting Box folder path:", error);
+      if (axios.isAxiosError(error) && error.response) {
+        alert(`エラー: ${JSON.stringify(error.response.data)}`); // 詳細なエラーメッセージを表示
+      } else {
+        alert("Boxフォルダの連携に失敗しました。");
+      }
     }
+  };
+
+  const handleConnectBox = (projectId: number) => {
+    // モーダルを開いてフルパスを入力させる
+    setSelectedProjectId(projectId);
+    setIsPathModalOpen(true);
   };
 
   const handleDisconnectBox = async (projectId: number) => {
@@ -163,7 +274,11 @@ export default function Settings() {
       fetchProjects();
     } catch (error) {
       console.error('Error disconnecting Box folder:', error);
-      alert('Boxフォルダの切断に失敗しました。');
+      if (axios.isAxiosError(error) && error.response) {
+        alert(`エラー: ${JSON.stringify(error.response.data)}`);
+      } else {
+        alert('Boxフォルダの切断に失敗しました。');
+      }
     }
   };
 
@@ -201,34 +316,31 @@ export default function Settings() {
   // プロジェクト一覧を取得した後、Boxフォルダ情報を取得する
   useEffect(() => {
     async function fetchFolderInfo(project: Project) {
-      if (project.box_folder_id) {
+      if (project.box_folder_id || project.box_folder_path) { // box_folder_path もチェック
         try {
-          const response = await axios.get<BoxFolderInfo>(`http://127.0.0.1:8000/api/box/folders/${project.box_folder_id}`);
-          setBoxFolderInfos(prev => ({ ...prev, [project.id]: response.data }));
+          // API経由のフォルダ情報取得はコメントアウトのまま
+          // setBoxFolderInfos(prev => ({ ...prev, [project.id]: { id: project.box_folder_id, name: project.box_folder_id } }));
+          setBoxFolderInfos(prev => ({
+            ...prev,
+            [project.id]: {
+              id: project.box_folder_id || project.box_folder_path, // box_folder_path を使用
+              name: project.box_folder_path || project.box_folder_id // box_folder_path を優先
+            }
+          }));
         } catch (error) {
           console.error(`Error fetching folder info for project ${project.id}:`, error);
           setBoxFolderInfos(prev => ({ ...prev, [project.id]: null }));
         }
+      } else {
+        setBoxFolderInfos(prev => ({ ...prev, [project.id]: null })); // box_folder_id, box_folder_path がない場合は null を設定
       }
     }
 
     // プロジェクト一覧取得後に各プロジェクトのフォルダ情報を取得
     projects.forEach(project => {
-      if (project.box_folder_id) {
-        fetchFolderInfo(project);
-      }
+      fetchFolderInfo(project);
     });
   }, [projects]);
-
-  const fetchProjects = async () => {
-    try {
-      const response = await axios.get<Project[]>('http://127.0.0.1:8000/api/projects');
-      setProjects(response.data);
-    } catch (error) {
-      console.error('Error fetching projects:', error);
-      alert('プロジェクトの取得に失敗しました。');
-    }
-  };
 
   const fetchAllProjectFiles = async () => {
     try {
@@ -394,18 +506,134 @@ export default function Settings() {
     }
   };
 
-  // Assume `solutions` is managed elsewhere or omit if not relevant
-  const [solutions, setSolutions] = useState<any[]>([]); // Update with actual type
-
   const filteredSolutions = solutions.filter((solution) =>
     solution.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  // キーワードを上に移動する関数
+  const handleMoveKeywordUp = async (index: number) => {
+    if (index > 0) {
+      const newKeywords = [...newsKeywords];
+      const temp = newKeywords[index];
+      newKeywords[index] = newKeywords[index - 1];
+      newKeywords[index - 1] = temp;
+      setNewsKeywords(newKeywords);
+      try {
+        await axios.post('http://127.0.0.1:8000/api/news/keywords', newKeywords);
+      } catch (error) {
+        console.error('Failed to update keywords:', error);
+      }
+    }
+  };
+
+  // キーワードを下に移動する関数
+  const handleMoveKeywordDown = async (index: number) => {
+    if (index < newsKeywords.length - 1) {
+      const newKeywords = [...newsKeywords];
+      const temp = newKeywords[index];
+      newKeywords[index] = newKeywords[index + 1];
+      newKeywords[index + 1] = temp;
+      setNewsKeywords(newKeywords);
+      try {
+        await axios.post('http://127.0.0.1:8000/api/news/keywords', newKeywords);
+      } catch (error) {
+        console.error('Failed to update keywords:', error);
+      }
+    }
+  };
+
+  const activeProjects = projects.filter(project => !project.is_archived);
+
+  // グローバルベースディレクトリ設定コンポーネント
+  const GlobalBaseDirectory = () => {
+    return (
+      <div className="bg-white p-6 rounded-lg shadow mt-6">
+        <h2 className="text-xl font-semibold mb-4">ベースディレクトリ設定</h2>
+        <div className="flex items-center space-x-4">
+          <span className="text-gray-700">現在のベースディレクトリ:</span>
+          <span className="font-mono text-gray-800">{baseDirectory || "未設定"}</span>
+          <button
+            onClick={() => {
+              setNewBaseDirectoryInput(baseDirectory);
+              setIsBaseDirModalOpen(true);
+            }}
+            className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
+          >
+            変更
+          </button>
+        </div>
+
+        {/* ベースディレクトリ変更モーダル */}
+        {isBaseDirModalOpen && (
+          <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
+            <div className="bg-white p-6 rounded-lg shadow-lg w-96">
+              <h2 className="text-xl font-semibold mb-4">ベースディレクトリを変更</h2>
+              <input
+                type="text"
+                value={newBaseDirectoryInput}
+                onChange={(e) => setNewBaseDirectoryInput(e.target.value)}
+                placeholder="/path/to/box/base/directory"
+                className="w-full p-2 border border-gray-300 rounded mb-4"
+              />
+              <div className="flex justify-end space-x-2">
+                <button
+                  onClick={() => {
+                    setIsBaseDirModalOpen(false);
+                    setNewBaseDirectoryInput('');
+                  }}
+                  className="px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400"
+                >
+                  キャンセル
+                </button>
+                <button
+                  onClick={handleSaveBaseDirectory}
+                  className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+                >
+                  保存
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // グローバルベースディレクトリ保存ハンドラ
+  const handleSaveBaseDirectory = async () => {
+    if (!(newBaseDirectoryInput.startsWith('/') || /^[A-Za-z]:\//.test(newBaseDirectoryInput))) {
+      alert('ベースディレクトリは絶対パスで入力してください。');
+      return;
+    }
+  
+    // Windowsパスの場合、先頭に '/' を追加
+    let normalizedPath = newBaseDirectoryInput;
+    if (process.platform === 'win32' && !newBaseDirectoryInput.startsWith('/')) {
+      normalizedPath = '/' + newBaseDirectoryInput;
+    }
+  
+    try {
+      await axios.put('http://127.0.0.1:8000/api/box/base-directory', {
+        new_base_directory: normalizedPath,
+      });
+      alert('ベースディレクトリが更新されました。');
+      setBaseDirectory(normalizedPath);
+      setIsBaseDirModalOpen(false);
+      setNewBaseDirectoryInput('');
+    } catch (error) {
+      console.error('Error setting base directory:', error);
+      if (axios.isAxiosError(error) && error.response) {
+        alert(`エラー: ${error.response.data.detail}`);
+      } else {
+        alert('ベースディレクトリの設定に失敗しました。');
+      }
+    }
+  };
 
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
       {/* タイトル */}
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold text-gray-800">設定</h1>
         <p>Access Token: {accessToken ? accessToken : '未取得'}</p>
       </div>
 
@@ -430,6 +658,18 @@ export default function Settings() {
           >
             マスキング管理
           </button>
+          <button
+            className={`px-4 py-2 rounded ${activeTab === 'projectList' ? 'bg-[#173241] text-white' : 'bg-gray-200 text-gray-700'}`}
+            onClick={() => setActiveTab('projectList')} // activeTab を 'projectList' に変更
+          >
+            プロジェクト一覧
+          </button>
+          <button
+            className={`px-4 py-2 rounded ${activeTab === 'newsKeywords' ? 'bg-[#173241] text-white' : 'bg-gray-200 text-gray-700'}`}
+            onClick={() => setActiveTab('newsKeywords')}
+          >
+            ニュースキーワード設定
+          </button>
         </nav>
       </div>
 
@@ -451,14 +691,13 @@ export default function Settings() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {projects.map((project) => {
+                {activeProjects.map((project) => {
                   const linkedSlack = connectedSlackChannels.find((link) => link.project_id === project.id);
                   const slackChannel = slackChannels.find((channel) => channel.id === project.slack_channel_id);
                   const files = projectFiles[project.id] || [];
                   const groupId = groupLinks[project.id];
                   const slackTag = project.slack_tag || "";
                   const folderInfo = boxFolderInfos[project.id];
-                  const folderDisplayName = folderInfo ? folderInfo.name : project.box_folder_id || "未連携";
 
                   return (
                     <tr key={project.id} className="hover:bg-gray-50 transition-colors">
@@ -553,15 +792,9 @@ export default function Settings() {
                       </td>
                       {/* Boxフォルダ連携 */}
                       <td className="px-4 py-3 text-gray-800">
-                        {project.box_folder_id ? (
+                        {project.box_folder_path ? (
                           <div className="flex items-center space-x-2">
-                            <span>{folderDisplayName}</span>
-                            <button
-                              onClick={() => handleConnectBox(project.id)}
-                              className="text-blue-500 hover:text-blue-700"
-                            >
-                              変更
-                            </button>
+                            <span className="text-xs">{project.box_folder_path}</span>
                             <button
                               onClick={() => handleDisconnectBox(project.id)}
                               className="text-red-500 hover:text-red-700"
@@ -651,6 +884,39 @@ export default function Settings() {
                 })}
               </tbody>
             </table>
+          </div>
+
+          {/* グローバルベースディレクトリ設定コンポーネント */}
+          <GlobalBaseDirectory />
+        </div>
+      )}
+
+      {/* 相対パス入力モーダル */}
+      {isPathModalOpen && selectedProjectId !== null && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white p-6 rounded-lg shadow-lg w-96">
+            <h2 className="text-xl font-semibold mb-4">Boxフォルダの相対パスを入力</h2>
+            <input
+              type="text"
+              value={relativePath}
+              onChange={(e) => setRelativePath(e.target.value)}
+              placeholder="relative/path/to/folder"
+              className="w-full p-2 border border-gray-300 rounded mb-4"
+            />
+            <div className="flex justify-end space-x-2">
+              <button
+                onClick={() => setIsPathModalOpen(false)}
+                className="px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400"
+              >
+                キャンセル
+              </button>
+              <button
+                onClick={handleSetRelativePath}
+                className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+              >
+                連携
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -745,6 +1011,170 @@ export default function Settings() {
           </div>
         </div>
       )}
+
+      {activeTab === 'projectList' && ( // activeTab を 'projectList' に変更
+        <div>
+          <ProjectList /> {/* コンポーネント名を ProjectList に変更 */}
+        </div>
+      )}
+
+      {activeTab === 'newsKeywords' && (
+        <div>
+          <h2 className="text-2xl font-bold text-gray-800 mb-4">ニュースキーワード設定</h2>
+          <div className="mb-4">
+            <label htmlFor="new-keyword" className="block text-gray-700 text-sm font-bold mb-2">
+              キーワードを追加:
+            </label>
+            <div className="flex">
+              <input
+                type="text"
+                id="new-keyword"
+                className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline mr-2"
+                placeholder="新しいキーワードを入力"
+                value={newKeyword}
+                onChange={(e) => setNewKeyword(e.target.value)}
+              />
+              <button
+                className="px-4 py-2 bg-[#173241] text-white font-semibold rounded hover:bg-[#0F2835] focus:outline-none focus:shadow-outline"
+                type="button"
+                onClick={handleAddKeyword}
+              >
+                追加
+              </button>
+            </div>
+          </div>
+
+          {/* キーワードリスト (順番入れ替え機能付き) */}
+          <div>
+            <h3 className="text-xl font-semibold text-gray-800 mb-2">登録済みキーワード</h3>
+            <ul>
+              {newsKeywords.map((keyword, index) => ( // index を map 関数に追加
+                <li key={keyword.id} className="flex justify-between items-center px-4 py-2 border rounded mb-2">
+                  <div className="flex items-center">
+                    <span className="mr-4">{keyword.keyword}</span>
+                    <div className="flex flex-col">
+                      <button
+                        onClick={() => handleMoveKeywordUp(index)}
+                        className="p-1 hover:bg-gray-200 rounded-full focus:outline-none"
+                        disabled={index === 0} // 先頭の場合は disabled
+                      >
+                        <ChevronUp className="h-4 w-4 text-gray-700" />
+                      </button>
+                      <button
+                        onClick={() => handleMoveKeywordDown(index)}
+                        className="p-1 hover:bg-gray-200 rounded-full focus:outline-none"
+                        disabled={index === newsKeywords.length - 1} // 末尾の場合は disabled
+                      >
+                        <ChevronDown className="h-4 w-4 text-gray-700" />
+                      </button>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleDeleteKeyword(keyword.keyword)}
+                    className="px-2 py-1 bg-red-500 text-white rounded hover:bg-red-700"
+                  >
+                    削除
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
+// グローバルベースディレクトリ設定コンポーネント
+const GlobalBaseDirectory = () => {
+  const [isBaseDirModalOpen, setIsBaseDirModalOpen] = useState<boolean>(false);
+  const [newBaseDirectoryInput, setNewBaseDirectoryInput] = useState<string>('');
+  const [baseDirectory, setBaseDirectory] = useState<string>('');
+
+  useEffect(() => {
+    const fetchBaseDirectory = async () => {
+      try {
+        const response = await axios.get<{ box_base_directory: string }>('http://127.0.0.1:8000/api/box/base-directory');
+        setBaseDirectory(response.data.box_base_directory);
+      } catch (error) {
+        console.error('Failed to fetch base directory:', error);
+        setBaseDirectory('');
+      }
+    };
+
+    fetchBaseDirectory();
+  }, []);
+
+  const handleSaveBaseDirectory = async () => {
+    if (!newBaseDirectoryInput.startsWith('/')) {
+      alert('ベースディレクトリは絶対パスで入力してください。');
+      return;
+    }
+    try {
+      await axios.put('http://127.0.0.1:8000/api/box/base-directory', newBaseDirectoryInput);
+      alert('ベースディレクトリが更新されました。');
+      setBaseDirectory(newBaseDirectoryInput);
+      setIsBaseDirModalOpen(false);
+      setNewBaseDirectoryInput('');
+      // プロジェクトのファイル一覧を再取得
+      // fetchProjects関数を使用するため、グローバルステートやコンテキストを活用する必要があります。
+      // ここでは簡略化のため、ページ全体をリロードします。
+      window.location.reload();
+    } catch (error) {
+      console.error('Error setting base directory:', error);
+      alert('ベースディレクトリの設定に失敗しました。');
+    }
+  };
+
+  return (
+    <div className="bg-white p-6 rounded-lg shadow">
+      <h2 className="text-xl font-semibold mb-4">ベースディレクトリ設定</h2>
+      <div className="flex items-center space-x-4">
+        <span className="text-gray-700">現在のベースディレクトリ:</span>
+        <span className="font-mono text-gray-800">{baseDirectory || "未設定"}</span>
+        <button
+          onClick={() => {
+            setNewBaseDirectoryInput(baseDirectory);
+            setIsBaseDirModalOpen(true);
+          }}
+          className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
+        >
+          変更
+        </button>
+      </div>
+
+      {/* ベースディレクトリ変更モーダル */}
+      {isBaseDirModalOpen && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white p-6 rounded-lg shadow-lg w-96">
+            <h2 className="text-xl font-semibold mb-4">ベースディレクトリを変更</h2>
+            <input
+              type="text"
+              value={newBaseDirectoryInput}
+              onChange={(e) => setNewBaseDirectoryInput(e.target.value)}
+              placeholder="/path/to/box/base/directory"
+              className="w-full p-2 border border-gray-300 rounded mb-4"
+            />
+            <div className="flex justify-end space-x-2">
+              <button
+                onClick={() => {
+                  setIsBaseDirModalOpen(false);
+                  setNewBaseDirectoryInput('');
+                }}
+                className="px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400"
+              >
+                キャンセル
+              </button>
+              <button
+                onClick={handleSaveBaseDirectory}
+                className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+              >
+                保存
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};

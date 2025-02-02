@@ -29,6 +29,7 @@ export default function CreateProject() {
         issues: issues,
         stage: selectedStage,
         category: selectedCategory,
+        schedule: '[]',
       });
       alert('プロジェクトが作成されました。');
       router.push('/'); // ダッシュボードに戻る

@@ -1,6 +1,11 @@
 // src/frontend/app/store/projectStore.ts
 import { create } from 'zustand';
 
+export interface SessionItem {
+  session_title: string;
+  latest_timestamp: string;
+}
+
 interface Project {
   id: number;
   customer_name: string;
@@ -11,15 +16,16 @@ interface Project {
   category: string;
   slack_channel_id: string;
   slack_tag: string;
-  box_folder_id?: string;
+  box_folder_id: string;
+  schedule: string;
 }
 
 interface Task {
   title: string;
   tag: '新規作成' | '更新' | 'クローズ' | '無視';
-  assignee: string;  // 担当者名
-  due_date: string;  // 期限
-  detail: string;    // 詳細
+  assignee: string;
+  due_date: string;
+  detail: string;
 }
 
 interface SlackChannel {
@@ -38,7 +44,7 @@ interface UploadedFile {
   project_id: number;
 }
 
-interface SelectionOption {
+export interface SelectionOption {
   value: string;
   label: string;
   type: 'file' | 'slack';
@@ -51,8 +57,8 @@ interface ProjectState {
   connectedSlackChannels: ProjectSlackLink[];
   selectedSource: SelectionOption | null;
   projectFiles: { [key: number]: UploadedFile[] };
-  sessionTitles: string[];
-  setSessionTitles: (titles: string[]) => void;
+  sessionTitles: SessionItem[];  // 型を変更
+  setSessionTitles: (titles: SessionItem[]) => void;
   selectedSession: string | null;
   setSelectedSession: (session: string) => void;
   maskingEnabled: boolean;
@@ -78,7 +84,7 @@ const useProjectStore = create<ProjectState>((set) => ({
   setSessionTitles: (titles) => set({ sessionTitles: titles }),
   selectedSession: null,
   setSelectedSession: (session) => set({ selectedSession: session }),
-  maskingEnabled: true, // デフォルトで有効
+  maskingEnabled: false,
   setMaskingEnabled: (value) => set({ maskingEnabled: value }),
   extractedTasks: [],
   setExtractedTasks: (tasks) => set({ extractedTasks: tasks }),

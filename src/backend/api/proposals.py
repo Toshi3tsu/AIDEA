@@ -1,7 +1,7 @@
 # backend/api/proposals.py
 from fastapi import APIRouter, HTTPException, Path, Response
 from pydantic import BaseModel
-from database import read_csv, write_csv
+# from database import read_csv, write_csv
 from llm_service import generate_proposal
 from pptx import Presentation
 from pptx.util import Inches
@@ -17,6 +17,7 @@ from openai import OpenAI
 from dotenv import load_dotenv
 import httpx
 import json
+from typing import Optional
 
 load_dotenv()
 
@@ -228,7 +229,7 @@ def create_proposal_powerpoint(project_id: int, customer_info: str, bpmn_xml: st
 
 # PowerPoint ファイルのエンドポイント (提案書版)
 @router.get("/{project_id}/proposal")
-async def get_project_proposal(project_id: int = Path(..., gt=0)):
+async def get_project_proposal(project_id: int = Path(..., gt=0), solution_requirements: Optional[str] = None):
     df = read_projects()
     project_row = df[df['id'] == project_id]
     if project_row.empty:
@@ -236,7 +237,9 @@ async def get_project_proposal(project_id: int = Path(..., gt=0)):
     customer_name = project_row.iloc[0]['customer_name']
     bpmn_xml = project_row.iloc[0]['bpmn_xml']
     issues = project_row.iloc[0]['issues'] # 課題 (issues) を取得
-    solution_requirements = project_row.iloc[0]['solution_requirements'] # ソリューション要件を取得
+    if solution_requirements is None:
+        solution_requirements_db = project_row.iloc[0]['solution_requirements']
+        solution_requirements = solution_requirements_db if solution_requirements_db else "" # DBに値がない場合は空文字
 
     pptx_file_path = None
     try:

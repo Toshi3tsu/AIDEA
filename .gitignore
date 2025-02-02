@@ -7,10 +7,15 @@ Thumbs.db
 # IDEの設定や一時ファイル
 .vscode/
 .idea/
+.pytest_cache/
 *.swp
 *.swo
 *.log
 *.tmp
+*.coverage
+
+# Alembicのマイグレーションキャッシュ
+src/backend/migrations/__pycache__
 
 # Node.js関連の一時ファイル・フォルダ
 src/frontend/node_modules/
@@ -29,9 +34,17 @@ src/backend/venv/
 
 # 環境変数ファイル
 src/backend/.env
+src/backend/alembic.ini
 
 # マスキングモデル
 src/backend/model/
 
 # データファイル (必要に応じて)
 data/
+
+# その他
+*.sqlite
+*.db
+
+# テストファイル
+src/backend/test2.py

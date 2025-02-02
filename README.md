@@ -1,62 +1,78 @@
 
 # AIDEA: AI-Driven Enterprise Assistant
 
-## Overview
+## 概要
 
-AIDEA is a tool designed to visualize business workflows, identify bottlenecks, and generate optimized solution proposals by integrating stakeholder data and leveraging AI-powered suggestions. The application consists of a frontend built with Next.js and Tailwind CSS, and a backend implemented with FastAPI. Data is currently stored in CSV files for simplicity during the Proof of Concept (PoC) phase.
+AIDEAは、顧客情報やステークホルダー情報を基に業務フローを可視化し、ボトルネックを特定しながら最適なソリューション提案を行うためのツールです。Next.js + Tailwind CSSで構築されたフロントエンドと、FastAPIで実装されたバックエンドから構成されます。  
+以前はPoC（Proof of Concept）段階でデータをCSV管理していましたが、現在は**一部のデータ（projects、solutions、news）をPostgreSQLに移行**しています。
 
-Recent updates include advanced task extraction and integration features, PowerPoint proposal generation, and modifications to API integrations with Planner and Microsoft SSO.
+## 主な機能
 
-## Features
+- **ビジネスフロー可視化**  
+  顧客情報と課題を入力すると、自動的に詳細な業務フローを生成します。
+  
+- **ソリューション最適化**  
+  複数の業務レイヤーを考慮しながら、最適なソリューションや改善方法を提案します。
+  
+- **提案資料作成（PowerPoint）**  
+  - LLMとテンプレートを用いてPowerPoint資料を自動生成  
+  - 顧客情報や課題、提案内容をスライドに自動反映  
+  - BPMNダイアグラムをスライド内に埋め込み
+  
+- **タスク抽出・管理**  
+  - LLMを使用したドキュメントからのタスク抽出  
+  - タスクのタグ付け（新規作成／更新／クローズ／無視）と修正  
+  - Planner連携によるプロジェクト管理へのタスク反映
+  
+- **Research AI**  
+  - 複数のLLM（GPT-4o、DeepSeek V3、Perplexityなど）を並列実行  
+  - 研究結果をMarkdown形式で表示し、モデルごとにトグルで切り替え可能
 
-- **Business Flow Visualization**: Automatically generates detailed workflows based on customer information and challenges.
-- **Solution Optimization**: Suggests the best solutions by analyzing their impact across multiple layers of operations.
-- **Proposal Generation**:
-  - Enables users to generate PowerPoint proposals using LLM and templates.
-  - Automatically fills slides with customer information, identified challenges, and proposed solutions.
-  - Embeds BPMN diagrams into the proposal.
-- **Task Extraction and Management**:
-  - Extract tasks from documents using LLM.
-  - Review and modify extracted tasks with tag assignments (新規作成／更新／クローズ／無視).
-  - Link tasks to project management with Planner integration.
-- **Research AI**:
-  - Provides a dedicated page for AI-driven research.
-  - Parallel execution of multiple LLMs (GPT-4o, DeepSeek V3, Perplexity).
-  - Displays results in markdown format with toggle options for each model response.
-- **Responsive Frontend**: Provides a clean and intuitive UI with multiple screens:
-  - Dashboard
-  - Business Flow Generation
-  - Proposal Creation
-  - Research AI
-  - Manage Documents (with Task Extraction functionality)
-  - Product Management
-  - Project Management
-  - Settings
-- **Backend API**: RESTful API for workflow generation, solution evaluation, proposal generation, research AI, and data management.
-- **Masking Confirmation**: Before sending data to the LLM, a masking confirmation modal allows users to review and choose between masked and unmasked content.
+- **ファイル確認機能（Box連携）**  
+  - Boxと連携してアップロードファイルの所在や内容を確認  
+  - ファイル管理をシームレスに行えるように拡張
 
----
+- **チャット履歴管理（日時ごとセクション）**  
+  - チャット履歴を日付単位で区切り、過去の会話を整理して閲覧可能  
 
-## Project Structure
+- **ナビゲーションバーでのプロジェクト名・モデル名選択**  
+  - 画面上部のナビゲーションバーで現在の「プロジェクト名」や「使用するモデル」を切り替え
 
-```plaintext
+- **Azure OpenAI のモデル追加**  
+  - モデル一覧にAzure OpenAIのサポートを追加  
+  - 選択したモデルに応じてLLMのエンドポイントを切り替えて使用可能
+
+- **ExcelファイルのLLMバッチ処理**  
+  - Excelファイルを一括で読み込み、LLMによるタスク抽出やデータ変換をバッチ処理で実行  
+  - フロントエンドで処理状況をモニタリング
+
+
+## プロジェクト構成
+
+```
 project_root/
 │
-├── frontend/         # Frontend application (Next.js + Tailwind CSS)
+├── frontend/         # フロントエンド (Next.js + Tailwind CSS)
 │   ├── app/
 │   │   ├── config/
 │   │   │   └── msalInstance.ts
 │   │   ├── components/
+│   │   │   ├── BatchProcessingConfig.tsx
+│   │   │   ├── BatchProcessingLog.tsx
 │   │   │   ├── Chat.tsx
+│   │   │   ├── FileInput.tsx
 │   │   │   ├── ManageDocuments.tsx
-│   │   │   ├── TaskExtractionModal.tsx
 │   │   │   ├── MaskingConfirmationModal.tsx
+│   │   │   ├── ProjectList.tsx
+│   │   │   ├── ProjectSelector.tsx
+│   │   │   ├── RightSidebar.tsx
+│   │   │   ├── ScheduleComponent.tsx
 │   │   │   ├── Sidebar.tsx
-│   │   │   └── RightSidebar.tsx
+│   │   │   └── TaskExtractionModal.tsx
 │   │   ├── create-project/
 │   │   │   └── page.tsx
 │   │   ├── generate/
-│   │   │   ├── [projectId]/
+│   │   │   ├── sales-material/
 │   │   │   │   └── page.tsx
 │   │   │   ├── BpmnViewer.tsx
 │   │   │   └── page.tsx
@@ -73,15 +89,17 @@ project_root/
 │   │   ├── store/
 │   │   │   ├── chatStore.tsx
 │   │   │   ├── flowStore.tsx
+│   │   │   ├── modelStore
 │   │   │   └── projectStore.ts
+│   │   ├── globals.css
 │   │   ├── layout.tsx
 │   │   ├── page.tsx
-│   │   └── globals.css
+│   │   └── template.tsx
 │   ├── public/
 │   ├── package.json
 │   └── next.config.js
 │
-├── backend/          # Backend application (FastAPI)
+├── backend/          # バックエンド (FastAPI)
 │   ├── api/
 │   │   ├── __init__.py
 │   │   ├── ai.py
@@ -90,60 +108,60 @@ project_root/
 │   │   ├── chat_history.py
 │   │   ├── files.py
 │   │   ├── mask.py
+│   │   ├── news.py
 │   │   ├── notes.py
 │   │   ├── project_tasks.py
 │   │   ├── projects.py
 │   │   ├── proposals.py
 │   │   ├── slack.py
 │   │   ├── solutions.py
-│   │   └── task_extraction.py
+│   │   └── task.py
 │   ├── database.py
 │   ├── llm_service.py
 │   ├── main.py
 │   └── requirements.txt
 │
+├── migrations/
+│   └── env.py        # Alembicなどを用いたDBマイグレーション関連
+│
 ├── data/
 │   ├── uploads/
 │   ├── template.pptx
 │   ├── chat_history.csv
-│   ├── solutions.csv
 │   ├── files.csv
 │   ├── notes.csv
-│   └── projects.csv
+│   └── (projects.csv, solutions.csv, news.csv はPostgreSQLに移行済み)
 │
-└── README.md             # Project documentation
+└── README.md
 ```
 
+## 必要要件
 
----
-
-## Requirements
-
-### Frontend
+### フロントエンド
 
 - Node.js (>= 16.0)
-- npm or yarn
+- npmまたはyarn
 
-### Backend
+### バックエンド
 
 - Python (>= 3.8)
 - FastAPI
-- OpenAI Python Client (`openai`)
-- Python dotenv (`python-dotenv`)
-- Transformers, Torch (for masking and task extraction models)
+- OpenAI Python Client (openai)
+- python-dotenv (python-dotenv)
+- Transformers, Torch (PIIマスキングやタスク抽出モデル用)
+- PostgreSQL (>= 13) など
+- Alembic等のマイグレーションツール（必要に応じて）
 
----
+## セットアップ手順
 
-## Setup Instructions
-
-### 1. Clone the repository
+### 1. リポジトリをクローン
 
 ```bash
-git clone https://github.com/your-username/saiteki.git
-cd saiteki
+git clone https://github.com/your-username/AIDEA.git
+cd AIDEA
 ```
 
-### 2. Set up the frontend
+### 2. フロントエンドのセットアップ
 
 ```bash
 cd src/frontend
@@ -151,108 +169,141 @@ npm install
 npm run dev
 ```
 
-Access the frontend at `http://localhost:3000`.
+ブラウザで [http://localhost:3000](http://localhost:3000) を開きます。
 
-### 3. Set up the backend
+### 3. バックエンドのセットアップ
 
-1. Install Python dependencies:
+1. Python依存ライブラリをインストール
 
    ```bash
-   cd src/backend
+   cd ../backend
    pip install -r requirements.txt
    ```
 
-2. Create a `.env` file in the `src/backend` directory with your OpenAI API key and other secrets:
+2. `.env`ファイルを作成し、OpenAI APIキーや他の認証情報を設定
 
-   ```plaintext
+   ```
    OPENAI_API_KEY=your_openai_api_key_here
+   DATABASE_URL=postgresql://user:password@localhost:5432/your_db
    ```
 
-3. Run the backend:
+3. データベースの初期化／マイグレーション（Alembicなどを使用）
+   
+   ```bash
+   # Alembic環境が整っていると仮定
+   alembic upgrade head
+   ```
+
+4. バックエンド起動
 
    ```bash
    uvicorn main:app --reload
    ```
 
-Access the backend at `http://localhost:8000`.
+[http://localhost:8000](http://localhost:8000) でAPIエンドポイントを確認できます。
 
 ---
 
-## CSV File Structure
+## データ構造
 
-### `projects.csv`
+### PostgreSQLテーブル（例）
 
-| id | customer_name   | issues       | is_archived | bpmn_xml | solution_requirements | stage       |
-|----|-----------------|--------------|-------------|----------|-----------------------|-------------|
+- **projects**  
+  | id  | user_id | customer_name  | issues  | is_archived | bpmn_xml | solution_requirements | stage | category | slack_channel_id | slack_tag | box_folder_id | schedule |  
+  |-----|---------|----------------|---------|-------------|----------|-----------------------|-------|----------|------------------|----------|---------------|----------|
 
-### `chat_history.csv`
+- **solutions**  
+  | id  | name    | category | features |
+  |-----|---------|----------|----------|
+
+- **news**  
+  | id  | keyword | user_id |
+  |-----|---------|---------|
+
+（CSVでの管理を廃止し、PostgreSQLへ移行済み。migrations/env.py でスキーマ定義を管理）
+
+### chat_history.csv
 
 | project_id | session_title | timestamp          | sender | message     |
 |------------|---------------|--------------------|--------|-------------|
 
-### `files.csv`
+### files.csv
 
-| filename         | filepath         | project_id |
-|------------------|------------------|------------|
+| filename  | filepath        | project_id |
+|-----------|-----------------|------------|
 
-### `data/solutions.csv`
-
-| id | name | category | features |
-| -- | ---- | -------- | -------- |
-
-### `notes.csv`
+### notes.csv
 
 | project_id | concept_text  | design_notes  |
 |------------|---------------|---------------|
 
----
-
-## Usage
-
-1. Open the frontend at `http://localhost:3000`.
-2. Navigate to the **Generate** screen to input customer information and challenges.
-3. Click "Generate Flow" to create a workflow and proceed to solution selection.
-4. Evaluate solutions and generate a combined proposal.
-5. Use the **Proposal Creation** screen to generate a PowerPoint proposal.
-6. Navigate to **Research AI** to conduct AI-driven research with multiple LLMs.
-7. In **Manage Documents**, select a document and click "タスク抽出" to extract tasks.
-8. Review extracted tasks in the Task Extraction modal, modify tags, and link tasks.
-9. Use the **プロジェクト管理** page to manage project tasks with Planner integration.
-10. Manage solution data and settings via the **Settings** screen.
 
 ---
 
-## Changes & Enhancements
+## 使い方
 
-- Added PowerPoint proposal generation with LLM-based content and templates.
-- Implemented Research AI page with multi-model LLM response viewing.
-- Integrated AI-based task extraction using LLM and provided UI for task review/editing.
-- Improved session management in chat, including session title input and history synchronization.
-- Added dropdown menus in RightSidebar for session operations: project move, rename, and delete.
-- **Project Archives & Phases**: Implemented features for toggling project archive/assignment, adding project phases, and visualizing phase-specific graphs.
-- **API Updates**: Replaced Backlog with Planner for project management integration and added Microsoft SSO for API authentication.
-
----
-
-## Future Enhancements
-
-- Replace CSV with a relational database (e.g., PostgreSQL).
-- Implement user authentication and access control.
-- Enhance LLM prompts for better proposal, workflow, and task extraction accuracy.
-- Add support for exporting proposals, workflows, and tasks as PDF or other formats.
-- Integrate full Planner API operations and Microsoft SSO authentication flow.
-- Expand task linking and management functionalities in the Project Management page.
+1. [http://localhost:3000](http://localhost:3000) にアクセスし、フロントエンドを開く  
+2. **Generate**画面で顧客情報や課題を入力し、「Generate Flow」ボタンで業務フローを生成  
+3. 出力されたフローや提案ソリューションを確認し、必要に応じて調整  
+4. **Proposal Creation**画面（Generate > Sales Materialなど）でPowerPoint資料を生成  
+5. **Research AI**画面で複数LLMによる調査を実施  
+6. **Manage Documents**画面でドキュメントを選択し、タスク抽出機能（「タスク抽出」ボタン）を使用  
+7. 抽出されたタスクをタグ付けし、Planner連携でプロジェクト管理へ反映  
+8. **Project Management**画面でタスクを管理  
+9. **Settings**画面でソリューションや認証設定を調整  
+10. **ExcelファイルのLLMバッチ処理**機能を活用し、大量のデータを一括分析
 
 ---
 
-## License
+## 変更点・拡張機能
 
-This project is licensed under the [MIT License](LICENSE).
+- **CSVからPostgreSQLへの移行**  
+  - `projects.csv`, `solutions.csv`, `news.csv` をDB管理に変更  
+  - Alembic等でマイグレーションを管理し、PoCフェーズから本番運用を見据えた構成へ
 
-Additionally, this project utilizes the following third-party software:
+- **Box連携の実装（ファイル確認機能）**  
+  - Box APIと連携し、ファイル管理を強化  
+  - ファイルの所在と内容を確認しやすくなり、コラボレーションが容易に
 
-- [cameltech/japanese-gpt-1b-PII-masking](https://huggingface.co/cameltech/japanese-gpt-1b-PII-masking) licensed under the MIT License.
-- [BPMN.io](https://bpmn.io/) by Camunda Services GmbH, licensed under its [MIT License](https://github.com/bpmn-io/bpmn-js/blob/develop/LICENSE). The BPMN.io watermark is displayed in all rendered diagrams as required by the license.
+- **チャット履歴に日付ごとのセクション追加**  
+  - チャットログを日付単位でセクションに分割し、過去の会話を整理
+
+- **プロジェクト名・モデル名の選択をナビゲーションバーに移動**  
+  - 常に画面上部でプロジェクトやLLMモデルの切り替えが可能に
+
+- **モデルにAzure OpenAIを追加**  
+  - LLMオプションにAzure OpenAIを追加し、ニーズに合わせて選択可能に
+
+- **ExcelファイルのLLMバッチ処理を追加**  
+  - Excelファイルを一括で読み取り、LLMによる分析・タスク抽出を自動化  
+  - 大規模データの取り扱いが容易に
+
+- **その他**  
+  - 提案資料の自動生成（PPTX）機能  
+  - Research AI画面で複数LLMの結果を並列に取得  
+  - Planner連携でタスクやプロジェクト管理を効率化  
+  - Microsoft SSOの認証フローでセキュリティ強化
+
+---
+
+## 今後の展望
+
+- より高度なユーザー認証・アクセス制御の導入  
+- LLMプロンプトの強化（提案精度・タスク抽出精度の向上）  
+- 提案資料やワークフローをPDF・他形式でもエクスポート可能に  
+- Planner APIフル機能の統合とMicrosoft SSOとの連動強化  
+- タスク管理機能の拡充（タスク間の依存関係やガントチャート表示など）
+
+---
+
+## ライセンス
+
+このプロジェクトは [MIT License](LICENSE) に基づきライセンスされています。  
+
+また、以下のサードパーティソフトウェアを使用しています。  
+- [cameltech/japanese-gpt-1b-PII-masking](https://huggingface.co/cameltech/japanese-gpt-1b-PII-masking) (MIT License)  
+- [BPMN.io](https://bpmn.io/) by Camunda Services GmbH (MIT License)  
+  - 生成されたBPMNダイアグラムに `bpmn.io` のウォーターマークが表示されます。  
 
 ---
 
@@ -262,5 +313,5 @@ Additionally, this project utilizes the following third-party software:
 - [Tailwind CSS](https://tailwindcss.com/)
 - [FastAPI](https://fastapi.tiangolo.com/)
 - [OpenAI](https://openai.com/)
-- Microsoft SSO integration for enhanced security
-- Planner API integration replacing Backlog for project management
+- Microsoft SSO、Planner API連携
+- Box API連携

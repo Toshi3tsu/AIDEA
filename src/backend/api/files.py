@@ -1,11 +1,16 @@
 # src/backend/api/files.py
-from fastapi import APIRouter, UploadFile, File, HTTPException, Form
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, UploadFile, File, HTTPException, Form, Query, Request
+from fastapi.responses import FileResponse, PlainTextResponse
 from pydantic import BaseModel
 from typing import List
 import os
 import csv
 import shutil
+import logging
+from pypdf import PdfReader
+import json
+
+logging.basicConfig(level=logging.DEBUG)
 
 router = APIRouter()
 
@@ -45,6 +50,7 @@ def write_files(files: list):
 project_files = read_files()
 
 UPLOAD_DIRECTORY = "../../data/uploads/"
+BASE_DIRECTORY = "C:\\Users\\toshimitsu_fujiki\\Box" # ★ backend でも baseDirectory を定義 (frontend と合わせる)
 
 # ディレクトリが存在しない場合は作成
 if not os.path.exists(UPLOAD_DIRECTORY):
@@ -88,10 +94,11 @@ load_files_from_csv()
 
 @router.post("/upload-file", response_model=UploadedFile)
 async def upload_file(project_id: int = Form(...), file: UploadFile = File(...)):
-    file_location = os.path.join(UPLOAD_DIRECTORY, file.filename)
+    file_location = os.path.join(UPLOAD_DIRECTORY, str(project_id), file.filename) # プロジェクトID ごとのディレクトリに保存
+    os.makedirs(os.path.dirname(file_location), exist_ok=True) # ディレクトリが存在しない場合は作成
     with open(file_location, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
-    uploaded_file = UploadedFile(filename=file.filename, filepath=file_location, project_id=project_id)
+    uploaded_file = UploadedFile(filename=file.filename, filepath=file_location, project_id=project_id) # filepath には完全パスを保存
     project_files.append(uploaded_file)
     save_files_to_csv()  # CSVに保存
     return uploaded_file
@@ -117,8 +124,54 @@ async def delete_file(project_id: int, filename: str):
     return {"detail": "File deleted successfully."}
 
 @router.get("/download-file/{project_id}/{filename}")
-async def download_file(project_id: int, filename: str):
-    file_entry = next((file for file in project_files if file.project_id == project_id and file.filename == filename), None)
-    if not file_entry:
-        raise HTTPException(status_code=404, detail="File not found.")
-    return FileResponse(path=file_entry.filepath, filename=file_entry.filename)
+async def download_file(project_id: int, filename: str, request: Request, source_type: str = Query(default="box"), folder_path: str = Query(default="")): # file_type パラメータを削除
+    file_type = request.query_params.get('file_type') # ★ request から直接取得
+    if not file_type:
+        file_type = 'txt' # デフォルト値設定
+    logging.debug(f"Downloading file for project {project_id} with filename {filename}, source_type: {source_type}, folder_path: {folder_path}, file_type: {file_type}") # ★ ログ出力修正
+
+    if source_type == "csv":
+        file_entry = next((file for file in project_files if file.project_id == project_id and file.filename == filename), None)
+        logging.debug(f"File entry (CSV): {file_entry}")
+        if not file_entry:
+            raise HTTPException(status_code=404, detail="File not found in CSV.")
+        full_file_path = file_entry.filepath # CSV の filepath は完全パスを想定
+        logging.debug(f"Downloading CSV file: {full_file_path}")
+    elif source_type == "box":
+        full_file_path = os.path.join(BASE_DIRECTORY, folder_path, filename) # baseDirectory, folderPath, filename を結合
+        logging.debug(f"Downloading Box file: {full_file_path}")
+        if not os.path.exists(full_file_path):
+            raise HTTPException(status_code=404, detail="File not found in Box folder.")
+    else:
+        raise HTTPException(status_code=400, detail="Invalid source_type.")
+
+    try:
+        if file_type == 'pdf':
+            logging.debug(f"Processing as PDF file: {full_file_path}")
+            text_content = ""
+            reader = PdfReader(full_file_path)
+            for page in reader.pages:
+                text_content += page.extract_text()
+            return PlainTextResponse(text_content, media_type="text/plain; charset=utf-8")
+        elif file_type == 'boxnote':
+            logging.debug(f"Processing as BOXNOTE file: {full_file_path}")
+            with open(full_file_path, 'r', encoding='utf-8-sig') as f:
+                boxnote_json = json.load(f)
+                # BOXNOTE の JSON 構造に合わせてテキスト抽出処理を実装
+                # 例: 'content' フィールドにテキストが含まれている場合
+                if 'content' in boxnote_json:
+                    text_content = boxnote_json['content']
+                else:
+                    text_content = json.dumps(boxnote_json, indent=2, ensure_ascii=False)
+            return PlainTextResponse(text_content, media_type="text/plain; charset=utf-8")
+        elif file_type == 'txt':
+            logging.debug(f"Processing as TXT file: {full_file_path}")
+            with open(full_file_path, 'r', encoding='utf-8-sig') as f:
+                text_content = f.read()
+            return PlainTextResponse(text_content, media_type="text/plain; charset=utf-8")
+        else:
+            logging.debug(f"Default file processing (FileResponse): {full_file_path}")
+            return FileResponse(path=full_file_path, filename=filename)
+    except Exception as e:
+        logging.error(f"Error processing file: {full_file_path}, error: {e}")
+        raise HTTPException(status_code=500, detail=f"ファイル処理エラー: {str(e)}")

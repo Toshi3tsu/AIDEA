@@ -1,32 +1,68 @@
-# src/backend/database.py
-import csv
+# srr/backend/database.py
+from sqlalchemy import create_engine, Column, Integer, String, Text, Boolean, DateTime, ForeignKey
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker, relationship
+from sqlalchemy.orm import Session
 import os
 
-# プロジェクト構成に基づいたデータディレクトリ
-DATA_DIR = os.path.join(os.path.dirname(__file__), "../../data")
+# データベース接続設定（PostgreSQLを使用する場合）
+SQLALCHEMY_DATABASE_URL = "postgresql://postgres:CHG_S10131@localhost/aidea_db"  # 実際の設定に合わせてください
 
-def read_csv(filename):
-    """Read data from a CSV file."""
-    filepath = os.path.join(DATA_DIR, filename)
-    if not os.path.exists(filepath):
-        raise FileNotFoundError(f"{filename} does not exist in the data directory.")
-    try:
-        with open(filepath, 'r', newline='', encoding='utf-8') as csvfile:
-            reader = csv.DictReader(csvfile)
-            return list(reader)
-    except Exception as e:
-        raise RuntimeError(f"Failed to read CSV file: {str(e)}")
+# SQLAlchemyのエンジンとセッションを作成
+engine = create_engine(SQLALCHEMY_DATABASE_URL)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-def write_csv(filename, data):
-    """Write data to a CSV file."""
-    filepath = os.path.join(DATA_DIR, filename)
-    if not data:
-        raise ValueError("Data to write cannot be empty.")
+# ベースクラスを作成
+Base = declarative_base()
+
+# データベースセッションを取得するユーティリティ関数
+def get_db():
+    db = SessionLocal()
     try:
-        fieldnames = data[0].keys()
-        with open(filepath, 'w', newline='', encoding='utf-8') as csvfile:
-            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-            writer.writeheader()
-            writer.writerows(data)
-    except Exception as e:
-        raise RuntimeError(f"Failed to write to CSV file: {str(e)}")
+        yield db
+    finally:
+        db.close()
+
+# データベースモデル（例: Projectsテーブル）
+class Project(Base):
+    __tablename__ = "projects"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(String, index=True)
+    customer_name = Column(String, index=True)
+    issues = Column(Text)
+    is_archived = Column(Boolean, default=False)
+    bpmn_xml = Column(Text)
+    solution_requirements = Column(Text)
+    stage = Column(String)
+    category = Column(String)
+    slack_channel_id = Column(String)
+    slack_tag = Column(String)
+    box_folder_path = Column(String)
+    schedule = Column(DateTime, nullable=True)
+
+class Solution(Base):
+    __tablename__ = "solutions"
+
+    id = Column(String, primary_key=True, index=True)
+    name = Column(String)
+    category = Column(String)
+    features = Column(String)
+
+class NewsKeyword(Base):
+    __tablename__ = "news_keywords"
+
+    id = Column(Integer, primary_key=True, index=True)
+    keyword = Column(String, index=True)
+    user_id = Column(String, ForeignKey("users.id"), index=True) # ユーザーIDでフィルタリングや関連付けを容易にするためindexを追加
+
+class User(Base): # Userモデルの例
+    __tablename__ = "users"
+
+    id = Column(String, primary_key=True, index=True)
+    # 他のユーザー属性...
+    news_keywords = relationship("NewsKeyword", backref="user") # Userからキーワードへのリレーションシップ
+
+# 初期化：データベースのテーブルを作成
+def init_db():
+    Base.metadata.create_all(bind=engine)

@@ -1,10 +1,31 @@
 # src/backend/api/ai.py
 from fastapi import APIRouter, HTTPException
-from typing import Dict
+from typing import Dict, List
 from pydantic import BaseModel
-from llm_service import perform_research_with_llms, generate_bpmn_flow, analyze_business_flow, evaluate_solutions, generate_requirements
+from llm_service import perform_research_with_llms, generate_bpmn_flow, analyze_business_flow, evaluate_solutions, generate_requirements, generate_query_variations, call_llm
+import logging
+import asyncio
+import os
 
 router = APIRouter()
+
+MODEL_CONFIG = {
+    "gpt-4o-mini": {
+        "api_key": os.getenv("OPENAI_API_KEY"),
+        "cert_path": "C:\\Users\\toshimitsu_fujiki\\OpenAI_Cato_Networks_CA.crt", # 証明書のパス
+        "base_url": "https://api.openai.com/v1"
+    },
+    "deepseek-chat-v3": {
+        "api_key": os.getenv("DEEPSEEK_API_KEY"),
+        "cert_path": "C:\\Users\\toshimitsu_fujiki\\DeepSeek_CA.crt",
+        "base_url": "https://api.deepseek.com/v1"
+    },
+    "perplexity": {
+        "api_key": os.getenv("PERPLEXITY_API_KEY"),
+        "cert_path": "C:\\Users\\toshimitsu_fujiki\\Perplexity_Cato_Networks_CA.crt",
+        "base_url": "https://api.perplexity.ai"
+    }
+}
 
 class BusinessFlowRequest(BaseModel):
     customer_info: str
@@ -28,11 +49,12 @@ class SolutionEvaluationRequest(BaseModel):
 class SolutionEvaluationResponse(BaseModel):
     combination: str
 
-class ResearchRequest(BaseModel): # リクエストボディの型定義
+class ResearchRequest(BaseModel):
     request: str
-    llm1Enabled: bool
-    llm2Enabled: bool
-    llm3Enabled: bool
+    selectedLLMs: List[str]  # 修正: 個別のブール値からリストに変更
+
+class ResearchResponse(BaseModel):
+    llmResponses: Dict[str, str]  # 新規: LLM ID とレスポンスの辞書
 
 class RequirementsRequest(BaseModel):
     customer_info: str
@@ -42,32 +64,66 @@ class RequirementsRequest(BaseModel):
 class RequirementsResponse(BaseModel):
     response: str
 
-@router.post("/research-ai")
-async def research_ai(request_data: ResearchRequest) -> Dict[str, str]: # リクエストボディの型を ResearchRequest に変更
-    """
-    リクエスト内容とLLMの有効状態を受け取り、選択されたLLMで調査を実行し、結果を返すAPIエンドポイント。
-    """
-    user_request = request_data.request
-    llm_enabled_states = { # 有効状態を辞書にまとめる
-        "gpt-4o-mini": request_data.llm1Enabled,
-        "deepseek-chat-v3": request_data.llm2Enabled,
-        "perplexity": request_data.llm3Enabled,
-    }
+class LLMConfig(BaseModel):
+    id: str
+    name: str
+    endpoint: str
+    apiKey: str
+    model: str
+    customPrompt: str = None
 
-    if not user_request:
-        raise HTTPException(status_code=400, detail="リクエスト内容がありません")
+class SubmitPromptRequest(BaseModel):
+    prompt: str
+    llmConfig: LLMConfig
 
+class GenerateVariationsRequest(BaseModel):
+    text: str
+
+@router.post("/research-ai", response_model=ResearchResponse)
+async def research_ai(request: ResearchRequest):
+    """
+    リクエスト内容に基づいて、選択されたLLMを使用してリサーチを実行します。
+    """
     try:
-        llm_responses = await perform_research_with_llms(user_request, llm_enabled_states) # 有効状態を渡す
-        return {
-            "llm1Response": llm_responses[0],
-            "llm2Response": llm_responses[1],
-            "llm3Response": llm_responses[2],
-        }
+        # 有効なLLMのみをリストから抽出
+        llm_enabled_states = {llm_name: (llm_name in request.selectedLLMs) for llm_name in MODEL_CONFIG.keys()}
+        
+        responses = await perform_research_with_llms(request.request, llm_enabled_states)
+        
+        # レスポンスを辞書形式に変換
+        llm_responses = {}
+        for llm_name, response in zip(MODEL_CONFIG.keys(), responses):
+            llm_responses[llm_name] = response
+        
+        return ResearchResponse(llmResponses=llm_responses)
+    
     except Exception as e:
-        import logging
-        logging.exception("リサーチAIの実行中にエラーが発生しました")
-        raise HTTPException(status_code=500, detail=f"リサーチAIの実行中にエラーが発生しました: {str(e)}")
+        logging.error(f"Research AI 実行中にエラーが発生しました: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Research AI 実行中にエラーが発生しました: {str(e)}")
+
+@router.post("/generate-variations")
+async def generate_variations(request: GenerateVariationsRequest):
+    """
+    プロンプトの言い換えパターンを生成します。
+    """
+    try:
+        variations = await generate_query_variations(request.text)
+        return {"variations": variations}
+    except Exception as e:
+        logging.error(f"言い換えパターンの生成中にエラーが発生しました: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"言い換えパターンの生成中にエラーが発生しました: {str(e)}")
+
+@router.post("/submit-prompt")
+async def submit_prompt(request: SubmitPromptRequest):
+    """
+    指定されたLLMにプロンプトを送信します。
+    """
+    try:
+        response = await call_llm(request.prompt, request.llmConfig.model)
+        return {"response": response}
+    except Exception as e:
+        logging.error(f"LLMへのプロンプト送信中にエラーが発生しました: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"LLMへのプロンプト送信中にエラーが発生しました: {str(e)}")
 
 @router.post("/generate-flow", response_model=BusinessFlowResponse)
 async def generate_flow(request: BusinessFlowRequest):

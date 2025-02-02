@@ -3,8 +3,19 @@
 
 import { useState, useEffect } from 'react'
 import axios from 'axios'
+import { Layers } from 'lucide-react';
+import ReactDOM from 'react-dom/client';
 
 export default function ProductManagement() {
+  useEffect(() => {
+        document.querySelector('.page-title')!.textContent = 'プロダクト管理';
+        const iconContainer = document.querySelector('.page-icon')!;
+        iconContainer.innerHTML = '';
+        const icon = document.createElement('div');
+        const root = ReactDOM.createRoot(icon); // root を作成
+        root.render(<Layers className="h-5 w-5" />); // root の render メソッドを使用
+        iconContainer.appendChild(icon);
+      }, []);
   const [conceptText, setConceptText] = useState('')
   const [designNotes, setDesignNotes] = useState('')
   const projectId = 1

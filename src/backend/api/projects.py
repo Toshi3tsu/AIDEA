@@ -1,6 +1,8 @@
 # src/backend/api/projects.py
-from fastapi import APIRouter, HTTPException, Path, Response, Body
+from fastapi import APIRouter, HTTPException, Path, Response, Body, Depends
+from sqlalchemy.orm import Session
 from pydantic import BaseModel
+from datetime import datetime
 import pandas as pd
 import os
 from pptx import Presentation
@@ -13,26 +15,29 @@ import xml.etree.ElementTree as ET
 import re
 import logging
 import io
+import json
+from typing import List, Optional
+from database import get_db, Project
 
 # ロギング設定
 logging.basicConfig(level=logging.DEBUG)
 router = APIRouter()
 
-PROJECTS_CSV = os.path.join(os.path.dirname(__file__), '../../../data/projects.csv')
-
 # Pydanticモデルの定義
-class Project(BaseModel):
+class ProjectBase(BaseModel):
     id: int
+    user_id: str
     customer_name: str
     issues: str
     is_archived: bool
-    bpmn_xml: str = ""
-    solution_requirements: str = ""
+    bpmn_xml: str = None
+    solution_requirements: str = None
     stage: str = "営業"
     category: str = "プロジェクト"
-    slack_channel_id: str = ""
-    slack_tag: str = ""
-    box_folder_id: str = ""
+    slack_channel_id: str = None
+    slack_tag: str = None
+    box_folder_path: str = None
+    schedule: Optional[str] = ""
 
 class ProjectCreate(BaseModel):
     customer_name: str
@@ -40,43 +45,60 @@ class ProjectCreate(BaseModel):
     stage: str = "営業"
     category: str = "プロジェクト"
 
-class StageUpdate(BaseModel):
+class StageUpdate(ProjectBase):
     stage: str
 
-class ProjectUpdate(BaseModel):
+class ProjectUpdate(ProjectBase):
+    user_id: str = None
     customer_name: str = None
     issues: str = None
     stage: str = None
     category: str = None
+    schedule: Optional[str] = None
 
-class SlackUpdate(BaseModel):
+class ProjectOut(ProjectBase):
+    id: int
+    is_archived: bool
+    bpmn_xml: str = ""
+    solution_requirements: str = ""
+    slack_channel_id: str = ""
+    slack_tag: str = ""
+    box_folder_path: str = ""
+
+    class Config:
+        from_attributes = True
+
+class SlackUpdate(ProjectBase):
     channel_id: str
     tag: str = ""
 
-class FlowUpdate(BaseModel):
+class FlowUpdate(ProjectBase):
     bpmn_xml: str
 
-class RequirementsUpdate(BaseModel):
+class RequirementsUpdate(ProjectBase):
     solution_requirements: str
+
+PROJECTS_CSV = os.path.join(os.path.dirname(__file__), '../../../data/projects.csv')
 
 # プロジェクトCSVの読み込み
 def read_projects() -> pd.DataFrame:
     if not os.path.exists(PROJECTS_CSV):
-        df = pd.DataFrame(columns=['id', 'customer_name', 'issues', 'is_archived', 'bpmn_xml', 'solution_requirements', 'stage', 'slack_channel_id', 'slack_tag', 'box_folder_id'])
+        df = pd.DataFrame(columns=['id', 'customer_name', 'issues', 'is_archived', 'bpmn_xml', 'solution_requirements', 'stage', 'category', 'slack_channel_id', 'slack_tag', 'box_folder_path', 'schedule'])
         df.to_csv(PROJECTS_CSV, index=False)
-    df = pd.read_csv(PROJECTS_CSV, dtype={'id': int, 'customer_name': str, 'issues': str, 'is_archived': bool, 'bpmn_xml': str, 'solution_requirements': str, 'stage': str, 'category': str, 'slack_channel_id': str, 'slack_tag': str, 'box_folder_id': str})
+    df = pd.read_csv(PROJECTS_CSV, dtype={'id': int, 'customer_name': str, 'issues': str, 'is_archived': bool, 'bpmn_xml': str, 'solution_requirements': str, 'stage': str, 'category': str, 'slack_channel_id': str, 'slack_tag': str, 'box_folder_path': str, 'schedule': str})
     # 必要な列が存在しない場合は追加
-    for col in ['slack_channel_id', 'slack_tag', 'box_folder_id']:
-        if col not in df.columns:
+    for col in ['slack_channel_id', 'slack_tag', 'box_folder_path', 'schedule']:
+        if col not in df.columns or df[col].isnull().all():
             df[col] = ''
     # NaN を空文字列やデフォルト値に置き換える
     df['bpmn_xml'] = df['bpmn_xml'].fillna('')
     df['solution_requirements'] = df['solution_requirements'].fillna('')
     df['stage'] = df['stage'].fillna('営業')
     df['category'] = df['category'].fillna('プロジェクト')
-    df['slack_channel_id'] = df['slack_channel_id'].fillna('')
-    df['slack_tag'] = df['slack_tag'].fillna('')
-    df['box_folder_id'] = df['box_folder_id'].fillna('')
+    df['slack_channel_id'] = df['slack_channel_id'].fillna('').astype(str)
+    df['slack_tag'] = df['slack_tag'].fillna('').astype(str)
+    df['box_folder_path'] = df['box_folder_path'].fillna('').astype(str)
+    df['schedule'] = df['schedule'].fillna('').astype(str)
 
     return df
 
@@ -84,73 +106,85 @@ def read_projects() -> pd.DataFrame:
 def write_projects(df: pd.DataFrame):
     df.to_csv(PROJECTS_CSV, index=False)
 
-# 全プロジェクトの取得
-@router.get("/", response_model=list[Project])
-async def get_projects():
-    df = read_projects()
-    projects = df.to_dict(orient='records')
+# プロジェクトの取得
+@router.get("/", response_model=List[ProjectOut])
+async def get_projects(db: Session = Depends(get_db)):
+    projects = db.query(Project).all()
+    for project in projects:
+        # scheduleがNoneなら空文字列を設定
+        if project.schedule is None:
+            project.schedule = ""
+        if project.bpmn_xml is None:
+            project.bpmn_xml = ""
+        if project.solution_requirements is None:
+            project.solution_requirements = ""
+        if project.slack_channel_id is None:
+            project.slack_channel_id = ""
+        if project.slack_tag is None:
+            project.slack_tag = ""
+        if project.box_folder_path is None:
+            project.box_folder_path = ""
     return projects
 
 # 新規プロジェクトの作成
-@router.post("/", response_model=Project, status_code=201)
-async def create_project(project: ProjectCreate):
-    df = read_projects()
-    new_id = df['id'].max() + 1 if not df.empty else 1
-    new_project = {
-        'id': new_id,
-        'customer_name': project.customer_name,
-        'issues': project.issues,
-        'is_archived': False,
-        'bpmn_xml': "",
-        'solution_requirements': "",
-        'stage': project.stage,
-        'category': project.category,
-        'slack_channel_id': "",
-        'slack_tag': ""
-    }
-    new_row = pd.DataFrame([new_project])
-    df = pd.concat([df, new_row], ignore_index=True)
-    write_projects(df)
+@router.post("/", response_model=ProjectOut, status_code=201)
+async def create_project(project: ProjectCreate, db: Session = Depends(get_db)):
+    new_project = Project(
+        user_id="user_888", # ユーザーIDをバックエンドで設定 (実際には認証などから取得)
+        customer_name=project.customer_name,
+        issues=project.issues,
+        is_archived=False, # is_archived はデフォルトで False に設定
+        stage=project.stage,
+        category=project.category,
+        bpmn_xml="",
+        solution_requirements="",
+        slack_channel_id="",
+        slack_tag="",
+        box_folder_path="",
+    )
+    logging.debug(f"作成するプロジェクトオブジェクト: {new_project.__dict__}")
+    db.add(new_project)
+    db.commit()
+    db.refresh(new_project)
     return new_project
 
 # プロジェクトの更新（顧客情報と課題）
-@router.put("/{project_id}", response_model=Project)
-async def update_project(project_id: int = Path(..., gt=0), project: ProjectUpdate = None):
-    df = read_projects()
-    if project_id not in df['id'].values:
+@router.put("/{project_id}", response_model=ProjectOut)
+async def update_project(project_id: int, project: ProjectUpdate, db: Session = Depends(get_db)):
+    db_project = db.query(Project).filter(Project.id == project_id).first()
+    if not db_project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    index = df.index[df['id'] == project_id].tolist()[0]
+    if project.user_id:
+        db_project.user_id = project.user_id
+    if project.customer_name:
+        db_project.customer_name = project.customer_name
+    if project.issues:
+        db_project.issues = project.issues
+    if project.stage:
+        db_project.stage = project.stage
+    if project.category:
+        db_project.category = project.category
+    if project.schedule:
+        db_project.schedule = project.schedule
 
-    if project.customer_name is not None:
-        df.at[index, 'customer_name'] = project.customer_name
-    if project.issues is not None:
-        df.at[index, 'issues'] = project.issues
-    if project.stage is not None:
-        df.at[index, 'stage'] = project.stage
-    if project.category is not None:
-        df.at[index, 'category'] = project.category  # カテゴリの更新
+    db.commit()
+    db.refresh(db_project)
+    return db_project
 
-    write_projects(df)
-    updated_project = df.loc[index].to_dict()
-    return updated_project
-
-@router.put("/{project_id}/archive", response_model=Project)
-async def archive_project(project_id: int = Path(..., gt=0), data: dict = None):
-    """
-    プロジェクトをアーカイブする。リクエストボディで { "is_archived": true/false } を受け取る。
-    """
-    df = read_projects()
-    if project_id not in df['id'].values:
+# アーカイブ状態の更新
+@router.put("/{project_id}/archive", response_model=ProjectOut)
+async def archive_project(project_id: int, is_archived: bool, db: Session = Depends(get_db)):
+    db_project = db.query(Project).filter(Project.id == project_id).first()
+    if not db_project:
         raise HTTPException(status_code=404, detail="Project not found")
-    index = df.index[df['id'] == project_id].tolist()[0]
-    if data and 'is_archived' in data:
-        df.at[index, 'is_archived'] = data['is_archived']
-    write_projects(df)
-    updated_project = df.loc[index].to_dict()
-    return updated_project
 
-@router.put("/{project_id}/stage", response_model=Project)
+    db_project.is_archived = is_archived
+    db.commit()
+    db.refresh(db_project)
+    return db_project
+
+@router.put("/{project_id}/stage", response_model=ProjectOut)
 async def update_stage(project_id: int = Path(..., gt=0), stage_update: StageUpdate = None):
     df = read_projects()
     if project_id not in df['id'].values:
@@ -160,10 +194,10 @@ async def update_stage(project_id: int = Path(..., gt=0), stage_update: StageUpd
         df.at[index, 'stage'] = stage_update.stage
     write_projects(df)
     updated_project = df.loc[index].to_dict()
-    return updated_project
+    return ProjectOut(**updated_project)
 
 # 業務フローの更新
-@router.put("/{project_id}/flow", response_model=Project)
+@router.put("/{project_id}/flow", response_model=ProjectOut)
 async def update_flow(project_id: int = Path(..., gt=0), flow: FlowUpdate = None):
     df = read_projects()
     if project_id not in df['id'].values:
@@ -173,9 +207,9 @@ async def update_flow(project_id: int = Path(..., gt=0), flow: FlowUpdate = None
         df.at[index, 'bpmn_xml'] = flow.bpmn_xml
     write_projects(df)
     updated_project = df.loc[index].to_dict()
-    return updated_project
+    return ProjectOut(**updated_project)
 
-@router.put("/{project_id}/requirements", response_model=Project)
+@router.put("/{project_id}/requirements", response_model=ProjectOut)
 async def update_requirements(project_id: int = Path(..., gt=0), req_update: RequirementsUpdate = None):
     df = read_projects()
     if project_id not in df['id'].values:
@@ -185,7 +219,7 @@ async def update_requirements(project_id: int = Path(..., gt=0), req_update: Req
         df.at[index, 'solution_requirements'] = req_update.solution_requirements
     write_projects(df)
     updated_project = df.loc[index].to_dict()
-    return updated_project
+    return ProjectOut(**updated_project)
 
 def parse_bpmn_xml_content(xml_content):
     """BPMN XMLコンテンツを解析し、形状とコネクタのデータを抽出する。"""
@@ -387,7 +421,7 @@ async def get_project_powerpoint(project_id: int = Path(..., gt=0)):
         pass
 
 # 業務フローの削除
-@router.delete("/{project_id}/flow", response_model=Project)
+@router.delete("/{project_id}/flow", response_model=ProjectOut)
 async def delete_flow(project_id: int = Path(..., gt=0)):
     df = read_projects()
     if project_id not in df['id'].values:
@@ -396,19 +430,19 @@ async def delete_flow(project_id: int = Path(..., gt=0)):
     df.at[index, 'bpmn_xml'] = ""
     write_projects(df)
     updated_project = df.loc[index].to_dict()
-    return updated_project
+    return ProjectOut(**updated_project)
 
 # プロジェクトの削除
 @router.delete("/{project_id}", status_code=204)
-async def delete_project(project_id: int = Path(..., gt=0)):
-    df = read_projects()
-    if project_id not in df['id'].values:
+async def delete_project(project_id: int, db: Session = Depends(get_db)):
+    db_project = db.query(Project).filter(Project.id == project_id).first()
+    if not db_project:
         raise HTTPException(status_code=404, detail="Project not found")
-    df = df[df['id'] != project_id]
-    write_projects(df)
-    return
+    db.delete(db_project)
+    db.commit()
+    return {"detail": "Project deleted successfully"}
 
-@router.put("/{project_id}/slack", response_model=Project)
+@router.put("/{project_id}/slack", response_model=ProjectOut)
 async def connect_slack_channel(
     project_id: int = Path(..., gt=0),
     slack_data: SlackUpdate = Body(...)
@@ -425,9 +459,9 @@ async def connect_slack_channel(
     df.at[index, 'slack_tag'] = slack_data.tag
     write_projects(df)
     updated_project = df.loc[index].to_dict()
-    return updated_project
+    return ProjectOut(**updated_project)
 
-@router.delete("/{project_id}/slack", response_model=Project)
+@router.delete("/{project_id}/slack", response_model=ProjectOut)
 async def disconnect_slack_channel(project_id: int = Path(..., gt=0)):
     """
     プロジェクトからSlackチャンネル連携を解除（チャンネルIDやタグをクリア）
@@ -441,4 +475,4 @@ async def disconnect_slack_channel(project_id: int = Path(..., gt=0)):
     df.at[index, 'slack_tag'] = ""
     write_projects(df)
     updated_project = df.loc[index].to_dict()
-    return updated_project
+    return ProjectOut(**updated_project)

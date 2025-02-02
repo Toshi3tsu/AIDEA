@@ -3,10 +3,8 @@
 
 import { useState, useEffect } from 'react';
 import { Info } from 'lucide-react';
-import Select from 'react-select';
 import useProjectStore from '../store/projectStore';
 import useChatStore from '../store/chatStore';
-import { useModelStore } from '../store/modelStore';
 import axios from 'axios';
 
 interface ChatRecord {
@@ -15,23 +13,16 @@ interface ChatRecord {
   timestamp: string;
 }
 
-interface ModelOption {
-  value: string;
-  label: string;
+interface Props {
+  selectedModel: { value: string; label: string };
+  selectedProject: any;
 }
 
-export default function RightSidebar() {
-  const { projects, selectedProject, sessionTitles, setSessionTitles, setSelectedSession, maskingEnabled, setMaskingEnabled } = useProjectStore();
+export default function RightSidebar({ selectedModel, selectedProject }: Props) {
+  const { projects, sessionTitles, setSessionTitles, setSelectedSession, } = useProjectStore();
   const { resetMessages, addMessage } = useChatStore();
   const [selectedSessionLocal, setSelectedSessionLocal] = useState<string | null>(null);
   const [openDropdownSession, setOpenDropdownSession] = useState<string | null>(null);
-
-  // モデル選択状態の追加
-  const modelOptions: ModelOption[] = [
-    { value: 'gpt-4o-mini', label: 'GPT-4o-mini' },
-    { value: 'deepseek-chat', label: 'DeepSeek v3' },
-  ];
-  const { selectedModel, setSelectedModel } = useModelStore();
 
   useEffect(() => {
     if (selectedProject) {
@@ -58,7 +49,7 @@ export default function RightSidebar() {
     resetMessages();
     try {
       const response = await axios.get<ChatRecord[]>(`http://127.0.0.1:8000/api/chat_history/history/${selectedProject?.id}/${sessionTitle}`, {
-        params: { model: selectedModel.value }  // モデル情報をパラメータとして送信
+        params: { model: selectedModel.value }
       });
       response.data.forEach(record => {
         addMessage({ sender: record.sender as 'user' | 'ai', message: record.message });
@@ -130,33 +121,6 @@ export default function RightSidebar() {
         <Info className="h-5 w-5 text-gray-600" />
       </div>
 
-      {/* モデル選択ドロップダウン */}
-      <div className="mb-4">
-        <h3 className="text-md font-semibold mb-2">モデル選択</h3>
-        <Select
-          options={modelOptions}
-          value={selectedModel}
-          onChange={(option) => option && setSelectedModel(option)}
-        />
-      </div>
-
-      {/* マスキングポップアップトグルボタン */}
-      <div className="mb-4">
-        <h3 className="text-md font-semibold mb-2">マスキングポップアップ</h3>
-        <div className="flex items-center">
-          <label className="relative inline-flex items-center cursor-pointer">
-            <input
-              type="checkbox"
-              className="sr-only peer"
-              checked={maskingEnabled}
-              onChange={() => setMaskingEnabled(!maskingEnabled)}
-            />
-            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-500 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-5 peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-[#CB6CE6]"></div>
-            <span className="ml-3 text-sm font-medium text-gray-900">{maskingEnabled ? '有効' : '無効'}</span>
-          </label>
-        </div>
-      </div>
-
       {/* チャット履歴表示・選択セクション */}
       <div className="mb-4">
         <h3 className="text-md font-semibold mb-2">チャット履歴</h3>
@@ -177,7 +141,7 @@ export default function RightSidebar() {
                       }}
                       className="ml-2 text-gray-500 hover:text-gray-700 text-sm p-1"
                     >
-                      &#x22EE;
+                      ⋮
                     </button>
                   </div>
                   {openDropdownSession === title && (

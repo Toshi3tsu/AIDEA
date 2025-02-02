@@ -10,6 +10,8 @@ import ReactMarkdown from 'react-markdown';
 import TaskExtractionModal from './TaskExtractionModal';
 import { useRouter } from 'next/navigation';
 
+// ... (interfaces and Props as before)
+
 interface UploadedFile {
   filename: string;
   filepath: string;
@@ -45,17 +47,146 @@ interface ThreadsByTag {
   threads: SlackThread[];
 }
 
-export default function ManageDocuments() {
+interface Props {
+  selectedProject: any;
+}
+
+
+const boxnoteJsonToMarkdown = (json: any): string => {
+  if (!json || !json.doc || !json.doc.content) {
+    return '';
+  }
+
+  const processContent = (content: any[]): string => {
+    let markdown = '';
+    if (!Array.isArray(content)) {
+      return markdown; // Return empty string if content is not an array
+    }
+    for (const node of content) {
+      switch (node.type) {
+        case 'heading':
+          markdown += `${'#'.repeat(node.attrs.level)} ${processInlineContent(node.content)}\n`;
+          break;
+        case 'paragraph':
+          // paragraph が中身を持っている場合のみ出力。中身が無い場合は改行のみとする
+          if (node.content) {
+            markdown += `${processInlineContent(node.content)}\n\n`;
+          } else {
+            markdown += '\n';
+          }
+          break;
+        case 'bullet_list':
+          markdown += processList(node.content, '* ');
+          break;
+        case 'ordered_list':
+          markdown += processList(node.content, '1. ');
+          break;
+        case 'list_item':
+          markdown += processContent(node.content);
+          break;
+        case 'horizontal_rule':
+          markdown += '---\n';
+          break;
+        case 'text':
+          markdown += processText(node);
+          break;
+        case 'hard_break':
+          markdown += '\n';
+          break;
+        case 'image':
+          markdown += `![${node.attrs.alt || 'image'}](${node.attrs.src || node.attrs.boxSharedLink})\n`;
+          break;
+        case 'embed':
+          markdown += `[${node.attrs.title}](${node.attrs.url})\n`;
+          break;
+        case 'doc':
+          markdown += processContent(node.content);
+          break;
+        default:
+          console.warn('Unknown node type:', node.type);
+          markdown += processContent(node.content || []); // Process content in case of unknown node
+      }
+    }
+    return markdown;
+  };
+
+  const processInlineContent = (content: any): string => { // content can be any now
+    let inlineMarkdown = '';
+    if (!Array.isArray(content)) {
+      return inlineMarkdown; // Return empty string if content is not an array
+    }
+    for (const node of content) {
+      if (node.type === 'text') {
+        inlineMarkdown += processText(node);
+      } else if (node.type === 'hard_break') {
+        inlineMarkdown += '\n';
+      } else if (node.type === 'image') {
+        inlineMarkdown += `![${node.attrs.alt || 'image'}](${node.attrs.src || node.attrs.boxSharedLink})`;
+      } else if (node.type === 'embed') {
+        inlineMarkdown += `[${node.attrs.title}](${node.attrs.url})`;
+      }
+    }
+    return inlineMarkdown;
+  };
+
+
+  const processText = (node: any): string => {
+    let text = node.text || '';
+    if (node.marks) {
+      for (const mark of node.marks) {
+        if (mark.type === 'strong') {
+          text = `**${text}**`;
+        } else if (mark.type === 'highlight') {
+          text = `<mark style="background-color: ${mark.attrs.color}">${text}</mark>`; // Or use simple emphasis if highlight is not well supported in your markdown renderer
+        }
+        // Ignore other marks like author_id, font_color for basic markdown rendering
+      }
+    }
+    return text;
+  };
+
+
+  const processList = (content: any[], prefix: string): string => {
+    let listMarkdown = '';
+    let index = 1;
+    if (!Array.isArray(content)) {
+      return listMarkdown;
+    }
+    for (const item of content) {
+      if (item.type === 'list_item') {
+        const currentPrefix = prefix === '1. ' ? `${index}. ` : prefix;
+        // リスト項目の中身を取得
+        let itemContent = processContent(item.content);
+        // 改行・余分な空白をスペースに置換して1行にまとめる
+        itemContent = itemContent.replace(/\n+/g, ' ').trim();
+        listMarkdown += `${currentPrefix}${itemContent}\n`;
+        if (prefix === '1. ') {
+          index++;
+        }
+      }
+    }
+    // リストの後に1行空ける
+    listMarkdown += '\n';
+    return listMarkdown;
+  };
+
+  if (json && json.doc && Array.isArray(json.doc.content)) {
+    return processContent(json.doc.content);
+  } else if (Array.isArray(json)) {
+    return processContent(json);
+  }
+  return '';
+};
+
+
+export default function ManageDocuments({ selectedProject }: Props) {
+  // ... (rest of the component code as before)
   const {
-    projects,
-    setProjects,
     slackChannels,
     setSlackChannels,
-    connectedSlackChannels,
-    setConnectedSlackChannels,
     selectedSource,
-    selectedProject,
     setSelectedSource,
+    baseDirectory,
   } = useProjectStore();
 
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
@@ -68,14 +199,30 @@ export default function ManageDocuments() {
   const [threadsByTag, setThreadsByTag] = useState<ThreadsByTag[]>([]);
 
   const router = useRouter();
-  
+
   useEffect(() => {
     if (selectedProject) {
-      // プロジェクト変更時にスレッド情報をリセット
+      // プロジェクトが切り替わった際、選択されたソースと内容をクリア
+      setSelectedSource(null);
+      setFileContent(null);
+
+      // 既存の初期化処理
       setThreadsByTag([]);
       setUploadedFiles([]);
 
-      fetchFilesFromBox(selectedProject.box_folder_id);
+      console.log("selectedProject:", selectedProject);
+
+      if (selectedProject.box_folder_id) {
+        const folderPath = selectedProject.box_folder_id;
+        console.log("folderPath (box_folder_id):", folderPath);
+        console.log("fetchFilesFromBox を呼び出す (box_folder_id)");
+        fetchFilesFromBox(folderPath);
+      } else if (selectedProject.box_folder_path) {
+        const folderPath = selectedProject.box_folder_path;
+        console.log("folderPath (box_folder_path):", folderPath);
+        console.log("fetchFilesFromBox を呼び出す (box_folder_path)");
+        fetchFilesFromBox(folderPath);
+      }
       fetchFilesForProject(selectedProject.id);
       fetchSlackChannels();
       autoSearchThreadsForTags();
@@ -87,9 +234,19 @@ export default function ManageDocuments() {
     updateSelectionOptions(uploadedFiles, threadsByTag);
   }, [uploadedFiles, threadsByTag]);
 
-  const fetchFilesFromBox = async (folderId: string) => {
+  const fetchFilesFromBox = async (folderPath: string) => {
+    console.log("fetchFilesFromBox 関数が呼ばれました。folderPath:", folderPath);
     try {
-      const response = await axios.get<UploadedFile[]>(`http://127.0.0.1:8000/api/box/folders/${folderId}/files`);
+      // API経由のファイル取得をコメントアウト
+      // const response = await axios.get<UploadedFile[]>(`http://127.0.0.1:8000/api/box/folders/${folderId}/files`);
+      // setUploadedFiles(response.data);
+
+      const baseDirectory = 'C:\\Users\\toshimitsu_fujiki\\Box';
+      const fullFolderPath = baseDirectory ? `${baseDirectory}/${folderPath}` : folderPath;
+      // ローカルファイルパスからファイル一覧を取得する処理
+      const response = await axios.post<UploadedFile[]>('http://127.0.0.1:8000/api/box/list-local-files', {
+        folder_path: fullFolderPath.replace(/\//g, '\\'), // ★ / を \ に置換
+      });
       setUploadedFiles(response.data);
     } catch (error) {
       console.error('Error fetching Box files:', error);
@@ -100,7 +257,12 @@ export default function ManageDocuments() {
   const fetchFilesForProject = async (projectId: number) => {
     try {
       const response = await axios.get<UploadedFile[]>(`http://127.0.0.1:8000/api/files/files/${projectId}`);
-      setUploadedFiles(response.data);
+      setUploadedFiles(prevFiles => {
+        const newFiles = response.data.filter(newFile =>
+          !prevFiles.some(prevFile => prevFile.filename === newFile.filename)
+        );
+        return [...prevFiles, ...newFiles];
+      });
     } catch (error) {
       console.error('Error fetching files:', error);
       alert('ファイルの取得に失敗しました。');
@@ -166,21 +328,54 @@ export default function ManageDocuments() {
   const handleSourceSelect = async (selectedOption: SelectionOption | null) => {
     setSelectedSource(selectedOption);
     setFileContent(null);
-  
-    // ファイルが選択された場合、その内容を取得
+
     if (selectedOption?.type === 'file') {
+      const filename = selectedOption.value;
+      const fileExtension = filename.split('.').pop() || '';
+      const folderPath = selectedProject.box_folder_id || selectedProject.box_folder_path || "";
+
       try {
-        const fileResponse = await axios.get(
-          `http://127.0.0.1:8000/api/files/download-file/${selectedProject.id}/${selectedOption.value}`,
-          { responseType: 'text' }
-        );
+        let fileResponse;
+        if (fileExtension.toLowerCase() === 'pdf') {
+          // PDFファイルの場合
+          fileResponse = await axios.get(
+            `http://127.0.0.1:8000/api/files/download-file/${selectedProject.id}/${filename}`,
+            {
+              responseType: 'text',
+              params: { source_type: 'box', folder_path: folderPath, file_type: 'pdf' }, // file_type パラメータを追加
+            }
+          );
+        } else if (fileExtension.toLowerCase() === 'boxnote') {
+          // BOXNOTEファイルの場合 (拡張子が boxnote であると仮定。JSONと明記するなら json に変更)
+          fileResponse = await axios.get(
+            `http://127.0.0.1:8000/api/files/download-file/${selectedProject.id}/${filename}`,
+            {
+              responseType: 'text',
+              params: { source_type: 'box', folder_path: folderPath, file_type: 'boxnote' }, // file_type パラメータを追加
+            }
+          );
+          const boxnoteJson = JSON.parse(fileResponse.data);
+          const markdownContent = boxnoteJsonToMarkdown(boxnoteJson);
+          setFileContent(markdownContent);
+          return; // Important: Exit here to prevent setting raw JSON as fileContent later
+        } else {
+          // txtファイル、またはその他のテキストファイルとして扱う場合（デフォルト）
+          fileResponse = await axios.get(
+            `http://127.0.0.1:8000/api/files/download-file/${selectedProject.id}/${filename}`,
+            {
+              responseType: 'text',
+              params: { source_type: 'box', folder_path: folderPath, file_type: 'txt' }, // file_type パラメータを追加
+            }
+          );
+        }
         setFileContent(fileResponse.data); // ファイルの内容を保存
       } catch (error) {
         console.error('Error fetching file content:', error);
         alert('ファイルの内容を取得できませんでした。');
+        setFileContent(`ファイルの内容を取得できませんでした。\n\n${error}`); // エラー内容も表示
       }
     }
-    
+
     // スレッドが選択された場合、その内容を取得・表示
     if (selectedOption?.type === 'thread') {
       try {
@@ -196,13 +391,15 @@ export default function ManageDocuments() {
       } catch (error) {
         console.error('Error fetching thread content:', error);
         alert('スレッドの内容を取得できませんでした。');
+        setFileContent(`スレッドの内容を取得できませんでした。\n\n${error}`); // エラー内容も表示
       }
     }
   };
 
   const handleDownloadFile = (filename: string) => {
+    const folderPath = selectedProject.box_folder_id || selectedProject.box_folder_path || "";
     const link = document.createElement('a');
-    link.href = `http://127.0.0.1:8000/api/files/download-file/${selectedProject.id}/${filename}`;
+    link.href = `http://127.0.0.1:8000/api/files/download-file/${selectedProject.id}/${filename}?source_type=box&folder_path=${folderPath}`;
     link.download = filename;
     document.body.appendChild(link);
     link.click();
@@ -230,21 +427,18 @@ export default function ManageDocuments() {
     setSending(true);
 
     let docText = "";
-    if (uploadedFiles.length > 0 && selectedProject) {
-      try {
-        const response = await axios.get(
-          `http://127.0.0.1:8000/api/files/download-file/${selectedProject.id}/${uploadedFiles[0].filename}`,
-          { responseType: 'text' }
-        );
-        docText = response.data;
-        setDocumentText(docText);
-      } catch (error) {
-        console.error('Error fetching document text:', error);
-      }
+    if (selectedSource && selectedSource.type === 'file') { // 選択されたソースの内容を使用
+      docText = fileContent || ""; // fileContent が null の場合を考慮
+      setDocumentText(docText);
+    } else {
+      alert("タスク抽出を実行するにはファイルを選択してください。");
+      setSending(false);
+      return;
     }
 
+
     try {
-      const extractionResponse = await axios.post('http://127.0.0.1:8000/api/task_extraction/extract-tasks', {
+      const extractionResponse = await axios.post('http://127.0.0.1:8000/api/task/extract-tasks', {
         document_text: docText,
       });
       setExtractedTasks(extractionResponse.data.tasks);

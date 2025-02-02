@@ -1,7 +1,7 @@
 # src/backend/main.py
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from api import proposals, solutions, ai, project_tasks, projects, chat, chat_history, slack, box, files, notes, mask, task_extraction
+from api import proposals, solutions, ai, project_tasks, projects, chat, chat_history, slack, box, files, notes, mask, task, news
 from dotenv import load_dotenv
 
 # .env ファイルの読み込み
@@ -20,7 +20,6 @@ app.add_middleware(
 
 # ルーターの登録
 app.include_router(proposals.router, prefix="/api/proposals")
-app.include_router(proposals.router, prefix="/api/projects")
 app.include_router(solutions.router, prefix="/api/solutions")
 app.include_router(ai.router, prefix="/api/ai")
 app.include_router(project_tasks.router, prefix="/api/project_tasks")
@@ -32,7 +31,8 @@ app.include_router(box.router, prefix="/api/box", tags=["Box"])
 app.include_router(files.router, prefix="/api/files", tags=["Files"])
 app.include_router(notes.router, prefix="/api/notes", tags=["notes"])
 app.include_router(mask.router, prefix="/api/mask", tags=["Mask"])
-app.include_router(task_extraction.router, prefix="/api/task_extraction", tags=["TaskExtraction"])
+app.include_router(task.router, prefix="/api/task", tags=["Task"])
+app.include_router(news.router, prefix="/api/news", tags=["news"])
 
 @app.get("/")
 def root():

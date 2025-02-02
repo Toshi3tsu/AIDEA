@@ -3,6 +3,8 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import useProjectStore from '../store/projectStore';
+import { ChartBar } from 'lucide-react';
+import ReactDOM from 'react-dom/client';
 
 interface Task {
   title: string;
@@ -13,6 +15,15 @@ interface Task {
 }
 
 export default function ProjectManagement() {
+  useEffect(() => {
+        document.querySelector('.page-title')!.textContent = 'プロジェクト管理AI @ Powered by Planner';
+        const iconContainer = document.querySelector('.page-icon')!;
+        iconContainer.innerHTML = '';
+        const icon = document.createElement('div');
+        const root = ReactDOM.createRoot(icon); // root を作成
+        root.render(<ChartBar className="h-5 w-5" />); // root の render メソッドを使用
+        iconContainer.appendChild(icon);
+      }, []);
   const { extractedTasks } = useProjectStore();
 
   const [currentTasks, setCurrentTasks] = useState<Task[]>([
@@ -114,7 +125,6 @@ export default function ProjectManagement() {
 
   return (
     <div className="p-6 h-screen overflow-y-auto">
-      <h1 className="text-3xl font-bold mb-4">プロジェクト管理 Powered by Planner</h1>
       <div className="relative flex space-x-8">
         {/* 左側のタスク（抽出されたタスク） */}
         <div className="w-1/2">

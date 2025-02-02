@@ -6,6 +6,6 @@ interface ModelState {
 }
 
 export const useModelStore = create<ModelState>((set) => ({
-  selectedModel: { value: 'gpt-4o-mini', label: 'GPT-4o-mini' },
+  selectedModel: { value: 'Azure-gpt-4o-mini', label: 'Azure-GPT-4o-mini' },
   setSelectedModel: (model) => set({ selectedModel: model }),
 }));

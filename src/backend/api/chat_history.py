@@ -14,6 +14,11 @@ class MessageItem(BaseModel):
     message: str
     timestamp: str
 
+# 新たにセッション情報を返すためのモデルを定義
+class SessionItem(BaseModel):
+    session_title: str
+    latest_timestamp: str
+
 class SaveChatRequest(BaseModel):
     project_id: int
     session_title: str
@@ -67,16 +72,22 @@ async def get_chat_history(project_id: int, session_title: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/sessions/{project_id}", response_model=List[str])
+@router.get("/sessions/{project_id}", response_model=List[SessionItem])
 async def get_session_titles(project_id: int):
-    titles = set()
+    sessions = {}
     try:
         with open(HISTORY_CSV, mode='r', newline='', encoding='utf-8') as file:
             reader = csv.DictReader(file)
             for row in reader:
                 if int(row["project_id"]) == project_id:
-                    titles.add(row["session_title"])
-        return list(titles)
+                    session = row["session_title"]
+                    timestamp = row["timestamp"]
+                    # 既存のセッションがある場合は、最新のタイムスタンプを保持
+                    if session not in sessions or sessions[session] < timestamp:
+                        sessions[session] = timestamp
+        # タイムスタンプが新しい順にソートしてセッション一覧を作成
+        sorted_sessions = sorted(sessions.items(), key=lambda x: x[1], reverse=True)
+        return [SessionItem(session_title=session, latest_timestamp=timestamp) for session, timestamp in sorted_sessions]
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -116,7 +127,7 @@ async def delete_session(project_id: int, session_title: str):
             for row in reader:
                 if int(row["project_id"]) == project_id and row["session_title"] == session_title:
                     deleted = True
-                    continue  # この行は削除対象なのでリストに追加しない
+                    continue  # 削除対象はリストに追加しない
                 records.append(row)
 
         if not deleted:

@@ -103,31 +103,68 @@ async def call_llm(request: str, llm_name: str) -> str:
         logging.error(f"LLM '{llm_name}' の呼び出し中にエラーが発生しました: {str(e)}", exc_info=True)
         return f"[{llm_name}] エラーが発生しました: {str(e)}"
 
-async def perform_research_with_llms(request: str, llm_enabled_states: Dict[str, bool]) -> List[str]: # llm_enabled_states を引数に追加
+async def perform_research_with_llms(request: str, llm_enabled_states: Dict[str, bool]) -> List[str]:
     """
     リクエスト内容とLLMの有効状態を受け取り、有効なLLMのみを使用してリサーチを実行し、それぞれの回答をリストで返す。
     """
     llm_names = ["gpt-4o-mini", "deepseek-chat-v3", "perplexity"]
-    llm_tasks = [] # 空のリストで初期化
-    llm_responses = ["", "", ""] # デフォルトで空のレスポンスを設定
+    llm_tasks = []
+    llm_responses = ["", "", ""]  # デフォルトで空のレスポンスを設定
 
-    for index, llm_name in enumerate(llm_names): # index を追加
-        if llm_enabled_states[llm_name]: # 有効な場合のみLLMを実行
+    for index, llm_name in enumerate(llm_names):
+        if llm_enabled_states.get(llm_name, False):
             logging.info(f"LLM '{llm_name}' は有効です。実行します。")
             llm_tasks.append(call_llm(request, llm_name))
         else:
             logging.info(f"LLM '{llm_name}' は無効です。スキップします。")
-            llm_responses[index] = f"[{llm_name}] 無効に設定されているため、スキップされました。" # スキップされた旨をレスポンスに設定
+            llm_responses[index] = f"[{llm_name}] 無効に設定されているため、スキップされました。"
 
-    if llm_tasks: # 実行するLLMがある場合のみ gather を実行
-        partial_llm_responses = await asyncio.gather(*llm_tasks)
+    if llm_tasks:
+        partial_llm_responses = await asyncio.gather(*llm_tasks, return_exceptions=True)
         response_index = 0
         for index, llm_name in enumerate(llm_names):
-            if llm_enabled_states[llm_name]:
-                llm_responses[index] = partial_llm_responses[response_index] # gather の結果を順に格納
+            if llm_enabled_states.get(llm_name, False):
+                response = partial_llm_responses[response_index]
+                if isinstance(response, Exception):
+                    llm_responses[index] = f"[{llm_name}] エラーが発生しました: {str(response)}"
+                else:
+                    llm_responses[index] = response
                 response_index += 1
 
     return llm_responses
+
+@traceable
+async def generate_query_variations(text: str) -> List[str]:
+    """
+    プロンプトの言い換えパターンを生成します。
+    """
+    client = get_client("gpt-4o-mini") # Gemini 1.5 Flash-8B を使用
+
+    prompt = f"""
+    与えられたテキストを基に、複数の言い換えパターンを生成してください。
+    - 少なくとも3つの異なる言い換えパターンを生成してください。
+    - 各パターンは元のテキストの意味を保持しつつ、異なる表現を使用してください。
+    - 生成されたパターンはリスト形式で返してください。
+
+    テキスト:
+    {text}
+    """
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "あなたはプロのライターです。"},
+                {"role": "user", "content": prompt},
+            ],
+            max_tokens=2000,
+            temperature=0.7,
+        )
+        variations = response.choices[0].message.content.strip().split("\n")
+        variations = [variation.strip() for variation in variations if variation.strip()]
+        return variations
+    except Exception as e:
+        logging.error(f"言い換えパターンの生成中にエラーが発生しました: {str(e)}", exc_info=True)
+        raise RuntimeError(f"言い換えパターンの生成中にエラーが発生しました: {str(e)}")
 
 @traceable
 def generate_bpmn_flow(customer_info: str, issues: str, model: str = "gpt-4o-mini") -> str:
