@@ -50,7 +50,6 @@ export default function RootLayout({
               </div>
               <div className="flex items-center space-x-4">
                 <div className="flex items-center">
-                  <span className="mr-2 font-bold">プロジェクト名：</span>
                   <ProjectSelector />
                 </div>
                 <div className="flex items-center">

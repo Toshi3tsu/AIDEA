@@ -41,6 +41,16 @@ class Project(Base):
     box_folder_path = Column(String)
     schedule = Column(DateTime, nullable=True)
 
+class UploadedFile(Base):
+    __tablename__ = "uploaded_files"
+    id = Column(Integer, primary_key=True, index=True)
+    sourcename = Column(String, index=True)
+    sourcepath = Column(String)
+    project_id = Column(Integer, index=True)
+    creation_date = Column(DateTime, nullable=True)
+    processed = Column(Boolean, default=False)
+    processed_text = Column(String, nullable=True)
+
 class Solution(Base):
     __tablename__ = "solutions"
 
@@ -48,6 +58,17 @@ class Solution(Base):
     name = Column(String)
     category = Column(String)
     features = Column(String)
+
+class ChatHistory(Base):
+    __tablename__ = "chat_history"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True) # ID を追加、自動インクリメント
+    project_id = Column(Integer)
+    user_id = Column(String(50), nullable=False, default='user_888')
+    session_title = Column(String)
+    timestamp = Column(DateTime)
+    sender = Column(String)
+    message = Column(String)
 
 class NewsKeyword(Base):
     __tablename__ = "news_keywords"

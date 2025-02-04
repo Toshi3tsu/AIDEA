@@ -47,7 +47,7 @@ interface UploadedFile {
 export interface SelectionOption {
   value: string;
   label: string;
-  type: 'file' | 'slack';
+  type: 'file' | 'slack' | 'thread';
 }
 
 interface ProjectState {
@@ -71,9 +71,15 @@ interface ProjectState {
   setConnectedSlackChannels: (links: ProjectSlackLink[]) => void;
   setSelectedSource: (source: SelectionOption | null) => void;
   setProjectFiles: (projectId: number, files: UploadedFile[]) => void;
+  selectedUploadedFiles: string[]; // 選択されたファイル名を保持する状態を追加
+  setSelectedUploadedFiles: (files: string[]) => void; // 選択されたファイルを設定する関数を追加
+  selectedThreads: string[]; // 選択されたスレッドIDを保持する状態を追加
+  setSelectedThreads: (threads: string[]) => void; // 選択されたスレッドを設定する関数を追加
+  toggleFileSelection: (filename: string) => void; // ファイル選択をトグルする関数を追加
+  toggleThreadSelection: (threadTs: string) => void; // スレッド選択をトグルする関数を追加
 }
 
-const useProjectStore = create<ProjectState>((set) => ({
+const useProjectStore = create<ProjectState>((set, get) => ({
   projects: [],
   selectedProject: null,
   slackChannels: [],
@@ -97,6 +103,26 @@ const useProjectStore = create<ProjectState>((set) => ({
     set((state) => ({
       projectFiles: { ...state.projectFiles, [projectId]: files },
     })),
+  selectedUploadedFiles: [], // 初期状態は空の配列
+  setSelectedUploadedFiles: (files) => set({ selectedUploadedFiles: files }),
+  selectedThreads: [], // 初期状態は空の配列
+  setSelectedThreads: (threads) => set({ selectedThreads: threads }),
+  toggleFileSelection: (filename: string) => { // ファイル選択トグル関数
+    const selectedUploadedFiles = get().selectedUploadedFiles;
+    if (selectedUploadedFiles.includes(filename)) {
+      set({ selectedUploadedFiles: selectedUploadedFiles.filter(name => name !== filename) });
+    } else {
+      set({ selectedUploadedFiles: [...selectedUploadedFiles, filename] });
+    }
+  },
+  toggleThreadSelection: (threadTs: string) => { // スレッド選択トグル関数
+    const selectedThreads = get().selectedThreads;
+    if (selectedThreads.includes(threadTs)) {
+      set({ selectedThreads: selectedThreads.filter(id => id !== threadTs) });
+    } else {
+      set({ selectedThreads: [...selectedThreads, threadTs] });
+    }
+  },
 }));
 
 export default useProjectStore;

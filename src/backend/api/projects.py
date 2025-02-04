@@ -25,18 +25,18 @@ router = APIRouter()
 
 # Pydanticモデルの定義
 class ProjectBase(BaseModel):
-    id: int
-    user_id: str
-    customer_name: str
-    issues: str
-    is_archived: bool
-    bpmn_xml: str = None
-    solution_requirements: str = None
-    stage: str = "営業"
-    category: str = "プロジェクト"
-    slack_channel_id: str = None
-    slack_tag: str = None
-    box_folder_path: str = None
+    id: Optional[int] = None  # ここをオプショナルに変更
+    user_id: Optional[str] = None
+    customer_name: Optional[str] = None
+    issues: Optional[str] = None
+    is_archived: Optional[bool] = None
+    bpmn_xml: Optional[str] = None
+    solution_requirements: Optional[str] = None
+    stage: Optional[str] = "営業"
+    category: Optional[str] = "プロジェクト"
+    slack_channel_id: Optional[str] = None
+    slack_tag: Optional[str] = None
+    box_folder_path: Optional[str] = None
     schedule: Optional[str] = ""
 
 class ProjectCreate(BaseModel):
@@ -45,7 +45,7 @@ class ProjectCreate(BaseModel):
     stage: str = "営業"
     category: str = "プロジェクト"
 
-class StageUpdate(ProjectBase):
+class StageUpdate(BaseModel):
     stage: str
 
 class ProjectUpdate(ProjectBase):
@@ -55,6 +55,7 @@ class ProjectUpdate(ProjectBase):
     stage: str = None
     category: str = None
     schedule: Optional[str] = None
+    is_archived: Optional[bool] = None
 
 class ProjectOut(ProjectBase):
     id: int
@@ -68,17 +69,34 @@ class ProjectOut(ProjectBase):
     class Config:
         from_attributes = True
 
+class ArchiveProjectUpdate(BaseModel):
+    is_archived: bool
+
 class SlackUpdate(ProjectBase):
     channel_id: str
     tag: str = ""
 
-class FlowUpdate(ProjectBase):
+class FlowUpdate(BaseModel):
     bpmn_xml: str
 
-class RequirementsUpdate(ProjectBase):
+class RequirementsUpdate(BaseModel):
     solution_requirements: str
 
 PROJECTS_CSV = os.path.join(os.path.dirname(__file__), '../../../data/projects.csv')
+
+def replace_none_with_empty(project):
+    """プロジェクトオブジェクトの特定のフィールドが None なら空文字に置き換える"""
+    fields = [
+        "bpmn_xml",
+        "slack_channel_id",
+        "slack_tag",
+        "solution_requirements",
+        "box_folder_path",
+        "schedule",
+    ]
+    for field in fields:
+        if getattr(project, field) is None:
+            setattr(project, field, "")
 
 # プロジェクトCSVの読み込み
 def read_projects() -> pd.DataFrame:
@@ -111,19 +129,7 @@ def write_projects(df: pd.DataFrame):
 async def get_projects(db: Session = Depends(get_db)):
     projects = db.query(Project).all()
     for project in projects:
-        # scheduleがNoneなら空文字列を設定
-        if project.schedule is None:
-            project.schedule = ""
-        if project.bpmn_xml is None:
-            project.bpmn_xml = ""
-        if project.solution_requirements is None:
-            project.solution_requirements = ""
-        if project.slack_channel_id is None:
-            project.slack_channel_id = ""
-        if project.slack_tag is None:
-            project.slack_tag = ""
-        if project.box_folder_path is None:
-            project.box_folder_path = ""
+        replace_none_with_empty(project)
     return projects
 
 # 新規プロジェクトの作成
@@ -174,27 +180,44 @@ async def update_project(project_id: int, project: ProjectUpdate, db: Session = 
 
 # アーカイブ状態の更新
 @router.put("/{project_id}/archive", response_model=ProjectOut)
-async def archive_project(project_id: int, is_archived: bool, db: Session = Depends(get_db)):
+async def archive_project(
+    project_id: int,
+    project_update: ArchiveProjectUpdate = Body(...),
+    db: Session = Depends(get_db)
+):
     db_project = db.query(Project).filter(Project.id == project_id).first()
     if not db_project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    db_project.is_archived = is_archived
+    if project_update.is_archived is not None:
+        db_project.is_archived = project_update.is_archived
+
     db.commit()
     db.refresh(db_project)
+    
+    # ヘルパー関数で None を空文字に置換
+    replace_none_with_empty(db_project)
+    
     return db_project
 
 @router.put("/{project_id}/stage", response_model=ProjectOut)
-async def update_stage(project_id: int = Path(..., gt=0), stage_update: StageUpdate = None):
-    df = read_projects()
-    if project_id not in df['id'].values:
+async def update_stage(
+    project_id: int = Path(..., gt=0),
+    stage_update: StageUpdate = Body(...),
+    db: Session = Depends(get_db)
+):
+    db_project = db.query(Project).filter(Project.id == project_id).first()
+    if not db_project:
         raise HTTPException(status_code=404, detail="Project not found")
-    index = df.index[df['id'] == project_id].tolist()[0]
-    if stage_update and stage_update.stage:
-        df.at[index, 'stage'] = stage_update.stage
-    write_projects(df)
-    updated_project = df.loc[index].to_dict()
-    return ProjectOut(**updated_project)
+
+    db_project.stage = stage_update.stage
+    db.commit()
+    db.refresh(db_project)
+    
+    # ヘルパー関数で None を空文字に置換
+    replace_none_with_empty(db_project)
+    
+    return db_project
 
 # 業務フローの更新
 @router.put("/{project_id}/flow", response_model=ProjectOut)

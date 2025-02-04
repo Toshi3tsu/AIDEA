@@ -4,8 +4,8 @@ from pydantic import BaseModel
 from openai import OpenAI, AzureOpenAI
 import os
 from dotenv import load_dotenv
-from typing import Optional
-from .files import UploadedFile
+from typing import List, Optional
+# from .files import UploadedFile
 from .slack import get_project_slack_channel, ProjectSlackLink
 import logging
 import httpx
@@ -15,7 +15,7 @@ import httpx
 load_dotenv()
 
 # ログの設定
-logging.basicConfig(level=logging.DEBUG)
+# logging.basicConfig(level=logging.DEBUG)
 
 # モデルごとの設定（証明書とAPIキー）
 MODEL_CONFIG = {
@@ -105,9 +105,10 @@ router = APIRouter()
 class ChatRequest(BaseModel):
     message: str
     model: str
-    source_type: Optional[str] = None  # 'file' または 'slack' または 'thread'
-    source_id: Optional[str] = None    # ファイル名またはSlackチャンネルIDまたはスレッドID
-    source_content: Optional[str] = None # ソース内容を直接受け取る
+    source_type: str
+    source_id: Optional[str] = None
+    source_ids: Optional[List[str]] = None # 複数ソースID用フィールド
+    source_content: Optional[str] = None
 
 class ChatResponse(BaseModel):
     response: str

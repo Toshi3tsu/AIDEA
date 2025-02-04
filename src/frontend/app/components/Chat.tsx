@@ -9,7 +9,7 @@ import axios from 'axios';
 import ScrollableFeed from 'react-scrollable-feed';
 import { FaRobot } from 'react-icons/fa';
 import ReactMarkdown from 'react-markdown';
-import { Send, Info } from 'lucide-react';
+import { Send, Info, SquarePen } from 'lucide-react';
 import MaskingConfirmationModal from './MaskingConfirmationModal';
 
 interface ChatRecord {
@@ -31,6 +31,8 @@ export default function Chat() {
     sessionTitles,
     setSessionTitles,
     setSelectedSession,
+    selectedUploadedFiles, // グローバルな選択されたファイルリスト
+    selectedThreads,       // グローバルな選択されたスレッドリスト
   } = useProjectStore();
   // Model Store
   const { selectedModel } = useModelStore();
@@ -44,6 +46,7 @@ export default function Chat() {
   const [showMaskingModal, setShowMaskingModal] = useState(false);
   const [maskedText, setMaskedText] = useState<string>("");
   const [sourceContent, setSourceContent] = useState<string | null>(null);
+  const [fileContent, setFileContent] = useState<string | null>(null);
 
   // Local States for Right Sidebar
   const [selectedSessionLocal, setSelectedSessionLocal] = useState<string | null>(null);
@@ -61,43 +64,12 @@ export default function Chat() {
     }
   }, [selectedProject]);
 
-  // selectedSource が変更されたらソース内容を取得
   useEffect(() => {
-    const fetchSourceContent = async () => {
-      if (selectedSource) {
-        try {
-          const folderPath = selectedProject?.box_folder_id || selectedProject?.box_folder_path || "";
-          let fileType = 'txt'; // デフォルトは txt
-          if (selectedSource.type === 'file') {
-            const fileExtension = selectedSource.value.split('.').pop()?.toLowerCase() || '';
-            if (fileExtension === 'pdf') {
-              fileType = 'pdf';
-            } else if (fileExtension === 'boxnote') {
-              fileType = 'boxnote';
-            }
-          } else if (selectedSource.type === 'thread') {
-            fileType = 'thread';
-          }
-
-          const response = await axios.get(
-            `http://127.0.0.1:8000/api/files/download-file/${selectedProject?.id}/${selectedSource.value}`,
-            {
-              responseType: 'text',
-              params: { source_type: 'box', folder_path: folderPath, file_type: fileType },
-            }
-          );
-          setSourceContent(response.data);
-        } catch (error) {
-          console.error('Error fetching file content:', error);
-          setSourceContent(`ファイルの内容を取得できませんでした。\n\n${error}`);
-        }
-      } else {
-        setSourceContent(null);
-      }
-    };
-
-    fetchSourceContent();
-  }, [selectedSource, selectedProject]);
+    // fileContentが変更されたときに、バックエンドに渡す
+    if (fileContent) {
+      console.log("Updated file content:", fileContent);
+    }
+  }, [fileContent]);
 
   const fetchSessionTitles = async (projectId: number) => {
     try {
@@ -177,10 +149,15 @@ export default function Chat() {
         source_content: null,
       };
 
-      if (selectedSource && sourceContent) {
+      if (selectedUploadedFiles.length > 0 || selectedThreads.length > 0) {
+        chatRequest.source_type = 'multiple'; // 複数のソースを選択
+        chatRequest.source_ids = [...selectedUploadedFiles, ...selectedThreads]; // ファイル名とスレッドIDを配列で送信
+        // source_content は複数ファイルの場合は送信しない (必要に応じて調整)
+        chatRequest.source_content = null;
+      } else if (selectedSource) { // Fallback to single selectedSource if no files/threads are selected
         chatRequest.source_type = selectedSource.type;
         chatRequest.source_id = selectedSource.value;
-        chatRequest.source_content = sourceContent;
+        chatRequest.source_content = fileContent;
       }
 
       const response = await axios.post('http://127.0.0.1:8000/api/chat/chat', chatRequest);
@@ -341,19 +318,30 @@ export default function Chat() {
       .sort((a, b) => Number(b.replace("年", "")) - Number(a.replace("年", "")))
   ];
 
+  const getSelectedSourcesLabel = () => {
+    const selectedFileLabels = selectedUploadedFiles;
+    const selectedThreadLabels = selectedThreads.map(threadId => {
+      const thread = threadsByTag.flatMap(tbt => tbt.threads).find(thread => thread.ts === threadId);
+      return thread ? `（スレッド）${thread.text.substring(0, 20)}...` : `（スレッド ID: ${threadId}）`; // スレッドが見つからない場合のfallback
+    });
+
+    const allSelectedLabels = [...selectedFileLabels, ...selectedThreadLabels];
+
+    if (allSelectedLabels.length === 0) {
+      return `選択ソース: なし`;
+    } else if (allSelectedLabels.length === 1) {
+      return `選択ソース: ${allSelectedLabels[0]}`;
+    } else {
+      return `選択ソース: ${allSelectedLabels[0]} 他${allSelectedLabels.length - 1}ソース`;
+    }
+  };
+
+  const selectedSourcesLabel = getSelectedSourcesLabel();
+
   return (
     <div className="flex h-full">
       {/* Chat Area */}
       <div className="flex-1 flex flex-col p-4">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-2xl font-bold">生成AIチャット</h2>
-          <button
-            onClick={handleNewChat}
-            className="font-bold bg-[#173241] text-white px-4 py-2 rounded hover:bg-[#0F2835]"
-          >
-            新規チャット
-          </button>
-        </div>
         <div className="mb-4">
           <label className="block text-sm font-semibold mb-1">セッション名</label>
           <input
@@ -397,7 +385,7 @@ export default function Chat() {
           </ScrollableFeed>
         </div>
 
-        {showMaskingModal && (
+        {/* {showMaskingModal && (
           <MaskingConfirmationModal
             originalText={inputMessage}
             maskedText={maskedText}
@@ -414,34 +402,61 @@ export default function Chat() {
               setSending(false);
             }}
           />
-        )}
+        )} */}
 
         {/* メッセージ入力フィールド */}
         <form onSubmit={handleSendMessage} className="flex items-center">
-          <input
-            type="text"
+          <textarea
             value={inputMessage}
-            onChange={(e) => setInputMessage(e.target.value)}
+            onChange={(e) => {
+              setInputMessage(e.target.value);
+              e.target.style.height = 'auto'; // 高さをリセット
+              e.target.style.height = `${Math.min(e.target.scrollHeight, 5 * 20)}px`; // コンテンツに合わせて高さを設定 (最大5行)
+              if (e.target.scrollHeight > 5 * 20) {
+                e.target.style.overflowY = 'auto'; // スクロールバーを表示
+              } else {
+                e.target.style.overflowY = 'hidden'; // スクロールバーを非表示
+              }
+            }}
             placeholder="メッセージを入力..."
-            className="flex-1 border rounded-l-lg px-4 py-2 focus:outline-none"
+            className="flex-1 border rounded-l-lg px-4 py-2 focus:outline-none resize-none overflow-y-auto"
             disabled={sending}
+            rows={1} // 初期表示は1行
+            style={{ maxHeight: '100px', overflowY: 'hidden' }}
           />
           <button
             type="submit"
             className={`bg-[#CB6CE6] text-white px-4 py-2 rounded-r-lg flex items-center justify-center ${
-              sending ? 'opacity-50 cursor-not-allowed' : 'hover:bg-[#A94CCB]'
+              sending || !inputMessage.trim() ? 'opacity-50 cursor-not-allowed' : 'hover:bg-[#A94CCB]'
             }`}
-            disabled={sending}
+            disabled={sending || !inputMessage.trim()}
+            title={!inputMessage.trim() ? "プロンプトを実行するテキストを入力 (Ctrl + Enter)" : undefined}
           >
             {sending ? <LoadingIndicator /> : <Send className="h-5 w-5" />}
           </button>
         </form>
+
+        {/* 選択されたソースの名称を表示 */}
+        {Boolean(selectedSourcesLabel) && (
+          <div className="mt-2 text-xs text-gray-600">
+            {selectedSourcesLabel}
+          </div>
+        )}
       </div>
 
       {/* Right Sidebar */}
       <div className="w-64 bg-gray-50 shadow-lg flex flex-col p-4 overflow-y-auto">
         <div className="mb-4">
-          <h3 className="text-md font-semibold mb-2">チャット履歴</h3>
+          <div className="flex items-center justify-between">
+            <h3 className="text-md font-semibold">チャット履歴</h3>
+            <button
+              onClick={handleNewChat}
+              className="p-2 hover:bg-gray-200 rounded"
+              title="新しいチャット"
+            >
+              <SquarePen className="h-6 w-6 text-gray-600" />
+            </button>
+          </div>
           {selectedProject ? (
             <div className="max-h-180 overflow-y-auto border border-gray-200 rounded p-1">
               {orderedGroupKeys.length > 0 ? (

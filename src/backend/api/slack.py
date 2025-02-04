@@ -1,7 +1,9 @@
 # backend/api/slack.py
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
+from database import get_db, UploadedFile as DBUploadedFile
 from pydantic import BaseModel
 from typing import List, Optional
+from sqlalchemy.orm import Session
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 import os
@@ -36,6 +38,9 @@ class ThreadMessagesRequest(BaseModel):
     channel_id: str
     thread_ts: str
 
+class ThreadContentFromDBResponse(BaseModel):
+    processed_text: str
+
 @router.get("/slack-channels", response_model=List[SlackChannel])
 async def get_slack_channels():
     """
@@ -50,6 +55,16 @@ async def get_slack_channels():
         ]
     except SlackApiError as e:
         raise HTTPException(status_code=500, detail=f"Slack API Error: {e.response['error']}")
+
+@router.get("/thread-content-from-db", response_model=ThreadContentFromDBResponse)
+async def get_thread_content_from_db(project_id: int, thread_ts: str, db: Session = Depends(get_db)):
+    db_file = db.query(DBUploadedFile).filter(DBUploadedFile.project_id == project_id, DBUploadedFile.sourcename == thread_ts).first()
+    if not db_file or not db_file.processed_text:
+        try:
+            return ThreadContentFromDBResponse(processed_text="スレッドの内容はまだデータベースに登録されていません。") # DBにない場合は空で返す
+        except SlackApiError as e:
+            raise HTTPException(status_code=500, detail=f"Slack API Error: {e.response['error']}")
+    return ThreadContentFromDBResponse(processed_text=db_file.processed_text)
 
 @router.get("/project-slack-links", response_model=List[ProjectSlackLink])
 async def get_project_slack_links():
