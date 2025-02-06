@@ -9,7 +9,7 @@ import Select from 'react-select';
 import ReactMarkdown from 'react-markdown';
 import TaskExtractionModal from './TaskExtractionModal';
 import { useRouter } from 'next/navigation';
-import { UploadedFile, SlackChannel, SlackThread, SelectionOption, Task, ThreadsByTag, ManageDocumentsProps} from '../../types/document';
+import { UploadedFile, SlackChannel, SlackThread, SelectionOption, Task, ThreadsByTag, ManageDocumentsProps} from '../../src/types/document';
 
 export default function ManageDocuments({ selectedProject }: ManageDocumentsProps) {
   // ... (rest of the component code as before)
