@@ -49,7 +49,7 @@ export default function ProjectSelector() {
       <div className="flex items-center">
         <label className="mr-2 text-sm">プロジェクト名：</label>
         <select
-          className="px-3 py-2 border rounded text-sm"
+          className={`px-3 py-2 border rounded text-sm ${projectMode ? 'bg-[rgba(203,108,230,0.2)]' : ''}`}
           onChange={(e) => handleProjectSelect(Number(e.target.value))}
           value={selectedProject?.id || ''}
         >
@@ -70,7 +70,7 @@ export default function ProjectSelector() {
       <div className="flex items-center">
         <label className="mr-2 text-sm">タスク名：</label>
         <select
-          className="px-3 py-2 border rounded text-sm"
+          className={`px-3 py-2 border rounded text-sm ${projectMode ? 'bg-[rgba(203,108,230,0.2)]' : ''}`}
         >
           <option value="" disabled>タスクを選択してください</option>
           <option value="taskA">タスクA</option>

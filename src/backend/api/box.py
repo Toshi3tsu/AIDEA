@@ -37,8 +37,8 @@ class ProjectBase(BaseModel):
 
 class UploadedFileResponse(BaseModel):
     id: int
-    sourcename: str
-    sourcepath: str
+    source_name: str
+    source_path: str
     project_id: int
     creation_date: datetime
     processed: bool
@@ -250,7 +250,7 @@ async def extract_text_from_file(project_id: int, filename: str, db: Session = D
     # キャッシュの確認
     uploaded_file = db.query(UploadedFile).filter(
         UploadedFile.project_id == project_id,
-        UploadedFile.sourcename == filename
+        UploadedFile.source_name == filename
     ).first()
 
     if uploaded_file and uploaded_file.processed and uploaded_file.processed_text:
@@ -279,8 +279,8 @@ async def extract_text_from_file(project_id: int, filename: str, db: Session = D
     else:
         # ファイルがDBに存在しない場合は、processed=Trueとprocessed_textを設定して新規作成 (通常はlist-local-filesで事前登録されるはず)
         new_file = UploadedFile(
-            sourcename=filename,
-            sourcepath=file_path, # フルパスを保存
+            source_name=filename,
+            source_path=file_path, # フルパスを保存
             project_id=project_id,
             creation_date=datetime.utcnow(),
             processed=True,
@@ -395,14 +395,14 @@ async def list_local_files(req: LocalFileRequest, db: Session = Depends(get_db))
     for file_path in files:
         if os.path.isfile(file_path):
             filename = os.path.basename(file_path)
-            sourcename = filename  # sourcenameはファイル名と仮定
-            sourcepath = file_path  # sourcepathはフルパスを使用
+            source_name = filename  # source_nameはファイル名と仮定
+            source_path = file_path  # source_pathはフルパスを使用
             file_last_modified = datetime.fromtimestamp(os.path.getmtime(file_path)) # ファイルの最終更新日時を取得
 
-            # 同じsourcename, sourcepath, project_idのデータがすでに存在するか確認
+            # 同じsource_name, source_path, project_idのデータがすでに存在するか確認
             existing_file = db.query(UploadedFile).filter(
-                UploadedFile.sourcename == sourcename,
-                UploadedFile.sourcepath == sourcepath,
+                UploadedFile.source_name == source_name,
+                UploadedFile.source_path == source_path,
                 UploadedFile.project_id == project_id
             ).first()
 
@@ -416,8 +416,8 @@ async def list_local_files(req: LocalFileRequest, db: Session = Depends(get_db))
             else:
                 # 新規レコードの場合
                 new_file = UploadedFile(
-                    sourcename=sourcename,
-                    sourcepath=sourcepath,
+                    source_name=source_name,
+                    source_path=source_path,
                     project_id=project_id,
                     creation_date=file_last_modified, # 初回登録時のみ最終更新日時を設定
                     processed=False, # 初回は未処理とする

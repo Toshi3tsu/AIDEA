@@ -20,6 +20,7 @@ interface Project {
   category: string;
   slack_channel_id: string;
   slack_tag: string;
+  box_folder_id: string;
   box_folder_path: string;
   schedule: string;
 }
@@ -1049,9 +1050,9 @@ export default function SettingsPage() {
             <h3 className="text-xl font-semibold text-gray-800 mb-2">登録済みキーワード</h3>
             <ul>
               {newsKeywords.map((keyword, index) => ( // index を map 関数に追加
-                <li key={keyword.id} className="flex justify-between items-center px-4 py-2 border rounded mb-2">
+                <li key={keyword} className="flex justify-between items-center px-4 py-2 border rounded mb-2">
                   <div className="flex items-center">
-                    <span className="mr-4">{keyword.keyword}</span>
+                    <span className="mr-4">{keyword}</span>
                     <div className="flex flex-col">
                       <button
                         onClick={() => handleMoveKeywordUp(index)}
@@ -1070,7 +1071,7 @@ export default function SettingsPage() {
                     </div>
                   </div>
                   <button
-                    onClick={() => handleDeleteKeyword(keyword.keyword)}
+                    onClick={() => handleDeleteKeyword(keyword)}
                     className="px-2 py-1 bg-red-500 text-white rounded hover:bg-red-700"
                   >
                     削除

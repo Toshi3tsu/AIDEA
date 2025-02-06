@@ -30,7 +30,7 @@ app.include_router(slack.router, prefix="/api/slack", tags=["Slack"])
 app.include_router(box.router, prefix="/api/box", tags=["Box"])
 app.include_router(files.router, prefix="/api/files", tags=["Files"])
 app.include_router(notes.router, prefix="/api/notes", tags=["notes"])
-app.include_router(mask.router, prefix="/api/mask", tags=["Mask"])
+# app.include_router(mask.router, prefix="/api/mask", tags=["Mask"])
 app.include_router(task.router, prefix="/api/task", tags=["Task"])
 app.include_router(news.router, prefix="/api/news", tags=["news"])
 

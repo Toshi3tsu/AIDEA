@@ -9,51 +9,9 @@ import Select from 'react-select';
 import ReactMarkdown from 'react-markdown';
 import TaskExtractionModal from './TaskExtractionModal';
 import { useRouter } from 'next/navigation';
+import { UploadedFile, SlackChannel, SlackThread, SelectionOption, Task, ThreadsByTag, ManageDocumentsProps} from '../../types/document';
 
-// ... (interfaces and Props as before)
-
-interface UploadedFile {
-  id: number;
-  sourcename: string;
-  sourcepath: string;
-  processed: boolean;
-}
-
-interface SlackChannel {
-  id: string;
-  name: string;
-}
-
-interface SlackThread {
-  ts: string;
-  text: string;
-  user: string;
-}
-
-interface SelectionOption {
-  value: string;
-  label: string;
-  type: 'file' | 'slack' | 'thread';
-}
-
-interface Task {
-  title: string;
-  tag: '新規作成' | '更新' | 'クローズ' | '無視';
-  assignee: string;  // 担当者名
-  due_date: string;  // 期限
-  detail: string;    // 詳細
-}
-
-interface ThreadsByTag {
-  tag: string;
-  threads: SlackThread[];
-}
-
-interface Props {
-  selectedProject: any;
-}
-
-export default function ManageDocuments({ selectedProject }: Props) {
+export default function ManageDocuments({ selectedProject }: ManageDocumentsProps) {
   // ... (rest of the component code as before)
   const {
     slackChannels,
@@ -177,8 +135,8 @@ export default function ManageDocuments({ selectedProject }: Props) {
     threadsData: ThreadsByTag[] = []
   ) => {
     const fileOptions: SelectionOption[] = files.map((file) => ({
-      value: file.sourcename,
-      label: `（ファイル）${file.sourcename}`,
+      value: file.source_name,
+      label: `（ファイル）${file.source_name}`,
       type: 'file',
     }));
 
@@ -344,29 +302,30 @@ export default function ManageDocuments({ selectedProject }: Props) {
             placeholder="確認したいソースを選択してください"
             isClearable
           />
-          <button // ボタンを Select コンポーネントの右に移動
-              onClick={handleTaskExtraction}
-              className={`ml-4 px-4 py-2 mb-1 text-white rounded ${ // ml-4 で Select との間隔を調整
-                sending
-                  ? 'bg-gray-400 cursor-not-allowed'
-                  : 'bg-[#CB6CE6] hover:bg-[#A94CCB]'
-              }`}
-              disabled={sending}
-            >
-              {sending ? (
-                <div className="flex items-center">
-                  <svg className="animate-spin h-5 w-5 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-                  </svg>
-                  <span>処理中...</span>
-                </div>
-              ) : (
-                <div className="flex items-center">
-                  <ListTodo className="h-5 w-5" />
-                </div>
-              )}
-            </button>
+          <button
+            onClick={handleTaskExtraction}
+            className={`ml-4 px-4 py-2 mb-1 bg-[#CB6CE6] text-white rounded ${
+              sending || !selectedSource
+                ? 'opacity-50 cursor-not-allowed'
+                : 'hover:bg-[#A94CCB]'
+            }`}
+            disabled={sending || !selectedSource}
+            title={!selectedSource ? "確認中のソースからタスクを抽出する" : ""} // ツールチップテキストを追加
+          >
+            {sending ? (
+              <div className="flex items-center">
+                <svg className="animate-spin h-5 w-5 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                </svg>
+                <span>処理中...</span>
+              </div>
+            ) : (
+              <div className="flex items-center">
+                <ListTodo className="h-5 w-5" />
+              </div>
+            )}
+          </button>
         </div>
 
         {/* ソース内容確認エリア（スクロールせず内容は全て表示） */}
@@ -445,13 +404,13 @@ export default function ManageDocuments({ selectedProject }: Props) {
                   <input
                     type="checkbox"
                     className="mr-2 w-4 h-4 flex-shrink-0"
-                    checked={selectedUploadedFiles.includes(file.sourcename)}
-                    onChange={() => toggleFileSelection(file.sourcename)}
+                    checked={selectedUploadedFiles.includes(file.source_name)}
+                    onChange={() => toggleFileSelection(file.source_name)}
                   />
                 ) : (
                   <div className="mr-2 w-4 h-4 flex-shrink-0"></div> // processed が false の場合はチェックボックスを表示しない
                 )}
-                <span>{file.sourcename}</span>
+                <span>{file.source_name}</span>
               </li>
             ))}
           </ul>

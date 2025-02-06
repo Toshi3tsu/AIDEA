@@ -7,20 +7,14 @@ import useProjectStore, { SessionItem } from '../store/projectStore';
 import { useModelStore } from '../store/modelStore';
 import axios from 'axios';
 import ScrollableFeed from 'react-scrollable-feed';
-import { FaRobot } from 'react-icons/fa';
 import ReactMarkdown from 'react-markdown';
-import { Send, Info, SquarePen } from 'lucide-react';
+import { Send, BotMessageSquare, Info, SquarePen } from 'lucide-react';
 import MaskingConfirmationModal from './MaskingConfirmationModal';
-
-interface ChatRecord {
-  sender: string;
-  message: string;
-  timestamp: string;
-}
+import { ChatResponse, MessageItem, ChatRequest } from '../../src/types/chat';
 
 export default function Chat() {
   // Chat Store
-  const { messages, addMessage, resetMessages } = useChatStore();
+  const { messages, addMessage, resetMessages, selectedSourceIds, addSelectedSourceId, removeSelectedSourceId, resetSelectedSourceIds } = useChatStore();
   // Project Store
   const {
     selectedProject,
@@ -40,6 +34,7 @@ export default function Chat() {
   // Local States for Chat
   const [inputMessage, setInputMessage] = useState<string>('');
   const [sessionTitle, setSessionTitle] = useState<string>('');
+  const [sessionId, setSessionId] = useState<number | null>(null);
   const { selectedSession, setSelectedSession: setSelectedSessionStore } = useProjectStore();
   const [sessionTitleInput, setSessionTitleInput] = useState<string>(selectedSession || '');
   const [sending, setSending] = useState<boolean>(false);
@@ -49,8 +44,12 @@ export default function Chat() {
   const [fileContent, setFileContent] = useState<string | null>(null);
 
   // Local States for Right Sidebar
-  const [selectedSessionLocal, setSelectedSessionLocal] = useState<string | null>(null);
-  const [openDropdownSession, setOpenDropdownSession] = useState<string | null>(null);
+  const [selectedSessionLocal, setSelectedSessionLocal] = useState<number | null>(null);
+  const [openDropdownSession, setOpenDropdownSession] = useState<number | null>(null);
+
+  useEffect(() => {
+    handleNewChat();
+  }, []);
 
   // Update sessionTitleInput when selectedSession changes
   useEffect(() => {
@@ -71,10 +70,23 @@ export default function Chat() {
     }
   }, [fileContent]);
 
+  // 選択ソースの状態をプロジェクト選択時にも同期
+  useEffect(() => {
+    if (selectedUploadedFiles.length > 0) {
+      selectedUploadedFiles.forEach(fileId =>
+        addSelectedSourceId(fileId)
+      );
+    }
+  }, [selectedUploadedFiles]);
+
   const fetchSessionTitles = async (projectId: number) => {
     try {
       const response = await axios.get<SessionItem[]>(`http://127.0.0.1:8000/api/chat_history/sessions/${projectId}`);
-      setSessionTitles(response.data);
+      // APIからのレスポンスに session_id が含まれていることを期待
+      const sessionsWithId = response.data.map(session => ({
+        ...session,
+      }));
+      setSessionTitles(sessionsWithId);
     } catch (error) {
       console.error('Error fetching session titles:', error);
     }
@@ -91,9 +103,12 @@ export default function Chat() {
   );
 
   const handleNewChat = () => {
+    const newSessionId = Date.now();
     resetMessages();
+    resetSelectedSourceIds();
     setSessionTitleInput('');
     setSelectedSessionStore('');
+    setSessionId(newSessionId);
     setInputMessage('');
   };
 
@@ -129,57 +144,112 @@ export default function Chat() {
 
   const proceedWithSend = async (messageToSend: string) => {
     const proposedSessionTitle = messageToSend.trim().slice(0, 50);
-
+  
     if (!selectedSession && !sessionTitleInput) {
       setSessionTitleInput(proposedSessionTitle);
       setSelectedSessionStore(proposedSessionTitle);
     }
 
-    addMessage({ sender: 'user', message: messageToSend });
+    let cumulativeSourceIds: string[] = [];
+    if (messages.length > 0) {
+      // 過去の全メッセージからsource_idsを収集
+      const allSourceIds = messages.flatMap(msg => msg.source_ids || []);
+      cumulativeSourceIds = Array.from(new Set(allSourceIds)); // 重複排除
+    }
+
+    // 現在の選択ソースと過去の累積をマージ
+    const currentSelectedIds = selectedSourceIds.length > 0
+      ? selectedSourceIds
+      : (selectedSource ? [selectedSource.value] : []);
+
+    const newCumulativeSourceIds = Array.from(
+      new Set([...cumulativeSourceIds, ...currentSelectedIds])
+    );
+
+    const querySourceIds = currentSelectedIds;
+
+    // ユーザーのメッセージを、履歴用の累積ソースとともに追加
+    addMessage({
+      sender: 'user',
+      message: messageToSend,
+      timestamp: new Date().toISOString(),
+      source_name: selectedSource?.value || null,
+      source_ids: selectedSourceIds  // 履歴としては累積のソースを記録
+    });
+  
     const userMessage = messageToSend;
     setInputMessage('');
     setSending(true);
-
+  
     try {
-      let chatRequest: any = {
+      const currentSessionId = sessionId || Date.now();
+  
+      // chatRequest では、クエリ送信用のソース（現在選択中のもの）のみを使用する
+      let chatRequest: ChatRequest = {
         message: userMessage,
         model: selectedModel.value,
         source_type: 'none',
         source_id: null,
         source_content: null,
+        source_name: selectedSource?.value || null,
+        source_path: selectedSource?.label || null,
+        chat_history: messages,  // 履歴としては過去の会話全体を送信
       };
-
-      if (selectedUploadedFiles.length > 0 || selectedThreads.length > 0) {
-        chatRequest.source_type = 'multiple'; // 複数のソースを選択
-        chatRequest.source_ids = [...selectedUploadedFiles, ...selectedThreads]; // ファイル名とスレッドIDを配列で送信
-        // source_content は複数ファイルの場合は送信しない (必要に応じて調整)
+  
+      // ※ 各種ケース（ファイルアップロード、スレッド選択など）の処理も同様に、
+      //     クエリ送信用は「現在選択中」のものだけにするように調整する
+      if (selectedUploadedFiles.length > 0) {
+        chatRequest.source_type = 'multiple';
         chatRequest.source_content = null;
-      } else if (selectedSource) { // Fallback to single selectedSource if no files/threads are selected
-        chatRequest.source_type = selectedSource.type;
+        chatRequest.source_name = selectedUploadedFiles;
+        chatRequest.source_path = 'Uploaded Files';
+      } else if (selectedSource && selectedSource.type === 'file') {
+        chatRequest.source_type = 'file';
         chatRequest.source_id = selectedSource.value;
         chatRequest.source_content = fileContent;
+        chatRequest.source_name = selectedSource.value || null;
+        chatRequest.source_path = selectedSource.label || null;
+      } else if (selectedSource && selectedSource.type === 'thread') {
+        chatRequest.source_type = 'thread';
+        chatRequest.source_id = selectedSource.value;
+        chatRequest.source_content = fileContent;
+        chatRequest.source_name = selectedSource.value || null;
+        chatRequest.source_path = selectedSource.label || null;
       }
-
-      const response = await axios.post('http://127.0.0.1:8000/api/chat/chat', chatRequest);
-
-      addMessage({ sender: 'ai', message: response.data.response });
-
+  
+      console.log("送信する chatRequest:", chatRequest);
+      const response = await axios.post<ChatResponse>('http://127.0.0.1:8000/api/chat/chat', chatRequest);
+  
+      // AI の返答メッセージも、履歴には累積ソースを記録
+      addMessage({
+        sender: 'ai',
+        message: response.data.response,
+        timestamp: new Date().toISOString(),
+        source_name: response.data.source_name || null,
+        source_path: response.data.source_path || null,
+        source_ids: response.data.source_ids || []
+      });
+  
       const effectiveSessionTitle =
-        selectedSession || sessionTitleInput || proposedSessionTitle || `Session_${selectedProject?.id}_${new Date().toISOString()}`;
-
+        sessionTitleInput || proposedSessionTitle || `Session_${selectedProject?.id}_${new Date().toISOString()}`;
+  
       setTimeout(() => {
-        saveChatHistory(effectiveSessionTitle);
-      }, 0);
-
+        saveChatHistory(effectiveSessionTitle, currentSessionId);
+      }, 100);
+  
     } catch (error) {
       console.error('Error sending message:', error);
-      addMessage({ sender: 'ai', message: '申し訳ありません。エラーが発生しました。' });
+      addMessage({
+        sender: 'ai',
+        message: '申し訳ありません。エラーが発生しました。',
+        timestamp: new Date().toISOString()
+      });
     } finally {
       setSending(false);
     }
   };
 
-  const saveChatHistory = async (sessionTitle: string) => {
+  const saveChatHistory = async (sessionTitle: string, sessionId: number) => {
     if (!selectedProject) {
       console.warn('選択されたプロジェクトがありません。');
       return;
@@ -188,7 +258,10 @@ export default function Chat() {
     const currentMessages = useChatStore.getState().messages.map(msg => ({
       sender: msg.sender,
       message: msg.message,
-      timestamp: new Date().toISOString()
+      timestamp: msg.timestamp,
+      source_name: msg.source_name,
+      source_path: msg.source_path,
+      source_ids: msg.source_ids
     }));
 
     console.log("Request to save chat history:", {
@@ -199,6 +272,7 @@ export default function Chat() {
 
     try {
       await axios.post('http://127.0.0.1:8000/api/chat_history/save', {
+        session_id: sessionId,
         project_id: selectedProject?.id,
         session_title: sessionTitle,
         messages: currentMessages
@@ -207,84 +281,94 @@ export default function Chat() {
 
       await fetchSessionTitles(selectedProject.id);
       setSelectedSessionStore(sessionTitle);
-      setSelectedSessionLocal(sessionTitle);
+      setSelectedSessionLocal(sessionId);
     } catch (error) {
       console.error('Error saving chat history:', error);
     }
   };
 
   // Right Sidebar Handlers
-  const toggleDropdown = (title: string) => {
-    setOpenDropdownSession(prev => (prev === title ? null : title));
+  const toggleDropdown = (sessionId: number) => {
+    setOpenDropdownSession(prev => (prev === sessionId ? null : sessionId));
   };
 
-  const handleSessionSelect = async (sessionTitle: string) => {
-    setSelectedSessionLocal(sessionTitle);
+  const handleSessionSelect = async (session: SessionItem) => { // SessionItem を受け取る
+    const sessionTitle = session.session_title;
+    setSelectedSessionLocal(session.session_id);
     setSelectedSessionStore(sessionTitle);
     resetMessages();
     try {
-      const response = await axios.get<ChatRecord[]>(`http://127.0.0.1:8000/api/chat_history/history/${selectedProject?.id}/${sessionTitle}`, {
+      const response = await axios.get<MessageItem[]>(`http://127.0.0.1:8000/api/chat_history/history/${selectedProject?.id}/${session.session_id}`, {
         params: { model: selectedModel.value }
       });
       response.data.forEach(record => {
-        addMessage({ sender: record.sender as 'user' | 'ai', message: record.message });
+        addMessage({ // addMessage 時に source_name, source_path を含める
+          sender: record.sender as 'user' | 'ai',
+          message: record.message,
+          timestamp: record.timestamp,
+          source_name: record.source_name,
+          source_path: record.source_path,
+          source_ids: record.source_ids
+        });
       });
     } catch (error) {
       console.error('Error loading chat history:', error);
     }
   };
 
-  const handleRenameSession = async (sessionTitle: string) => {
-    const newTitle = prompt('新しいセッション名を入力してください:', sessionTitle);
+  const handleRenameSession = async (session: SessionItem) => { // 引数を SessionItem に変更
+    const newTitle = prompt('新しいセッション名を入力してください:', session.session_title);
     if (!newTitle) return;
     try {
-      await axios.put('http://127.0.0.1:8000/api/chat_history/rename', null, {
-        params: {
-          project_id: selectedProject?.id,
-          old_title: sessionTitle,
-          new_title: newTitle,
-        },
-      });
-      fetchSessionTitles(selectedProject!.id);
+        await axios.put('http://127.0.0.1:8000/api/chat_history/rename', null, {
+            params: {
+                project_id: selectedProject?.id,
+                session_id: session.session_id, // session_id を送信
+                new_title: newTitle,
+            },
+        });
+        fetchSessionTitles(selectedProject!.id);
     } catch (error) {
-      console.error('Error renaming session:', error);
+        console.error('Error renaming session:', error);
     }
   };
 
-  const handleDeleteSession = async (sessionTitle: string) => {
-    if (!confirm('このセッションを削除してもよろしいですか？')) return;
+  const handleDeleteSession = async (session: SessionItem) => {
+    if (!confirm(`このセッション「${session.session_title}」を削除してもよろしいですか？`)) return;
     try {
       await axios.delete('http://127.0.0.1:8000/api/chat_history/delete', {
         params: {
           project_id: selectedProject?.id,
-          session_title: sessionTitle,
+          session_id: session.session_id, // session_id を送信
         },
       });
       fetchSessionTitles(selectedProject!.id);
+      setSelectedSessionStore(''); // セッション削除後に選択中のセッションをクリア
+      resetMessages(); // メッセージ履歴もクリア
     } catch (error) {
       console.error('Error deleting session:', error);
     }
   };
 
-  const handleMoveProject = async (sessionTitle: string) => {
+  const handleMoveProject = async (session: SessionItem) => { // 引数を SessionItem に変更
     const newProjectIdStr = prompt('新しいプロジェクトIDを入力してください:');
     if (!newProjectIdStr) return;
     const newProjectId = parseInt(newProjectIdStr, 10);
     if (isNaN(newProjectId)) {
-      alert('有効なプロジェクトIDを入力してください。');
-      return;
+        alert('有効なプロジェクトIDを入力してください。');
+        return;
     }
     try {
-      await axios.put('http://127.0.0.1:8000/api/chat_history/move', null, {
-        params: {
-          old_project_id: selectedProject?.id,
-          new_project_id: newProjectId,
-          session_title: sessionTitle,
-        },
-      });
-      alert('セッションのプロジェクト移動が完了しました。');
+        await axios.put('http://127.0.0.1:8000/api/chat_history/move', null, {
+            params: {
+                old_project_id: selectedProject?.id,
+                new_project_id: newProjectId,
+                session_id: session.session_id, // session_id を送信
+            },
+        });
+        alert('セッションのプロジェクト移動が完了しました。');
     } catch (error) {
-      console.error('Error moving session:', error);
+        console.error('Error moving session:', error);
     }
   };
 
@@ -362,22 +446,43 @@ export default function Chat() {
             {messages.map((msg, index) => (
               <div
                 key={index}
-                className={`flex mb-2 mr-2 ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}
+                className={`mb-2 mr-2 ${msg.sender === 'user' ? 'text-right' : 'text-left'}`} // 全体TextMessageを左右寄せ
               >
-                {msg.sender === 'ai' && (
-                  <div className="flex-shrink-0">
-                    <FaRobot className="text-[#CB6CE6]" size={24} />
-                  </div>
-                )}
                 <div
-                  className={`w-[70%] max-w-[70%] rounded-lg px-4 py-2 ${
+                  className={`inline-block w-auto max-w-[70%] rounded-lg px-4 py-2 ${
                     msg.sender === 'user' ? 'bg-gray-100 text-gray-800' : 'bg-white text-black'
                   }`}
                 >
-                  {msg.sender === 'ai' ? (
-                    <ReactMarkdown>{msg.message}</ReactMarkdown>
-                  ) : (
-                    msg.message
+                  {msg.sender === 'ai' && (
+                    <div className="flex items-start mb-1"> {/* BotMessageSquareアイコンとメッセージをFlexboxで配置 */}
+                      <div className="flex-shrink-0 mt-1 mr-2"> {/* BotMessageSquareアイコンを上揃え */}
+                        <BotMessageSquare className="text-[#CB6CE6]" size={24} />
+                      </div>
+                      <div> {/* メッセージとソースを縦に並べる */}
+                        <div>
+                          {msg.sender === 'ai' ? (
+                            <ReactMarkdown>{msg.message}</ReactMarkdown>
+                          ) : (
+                            msg.message
+                          )}
+                        </div>
+                        {msg.sender === 'ai' && msg.source_ids && msg.source_ids.length > 0 && (
+                          <div className="text-xs text-gray-500 mt-1 block"> {/* ソースをメッセージ真下に配置 */}
+                            参照: {msg.source_ids.join(', ')}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  {msg.sender === 'user' && (
+                    <div>
+                      {msg.message}
+                       {msg.sender === 'user' && msg.source_name && ( // userメッセージにソース名が表示されるのを避けるために削除
+                          <div className="text-xs text-gray-500 mt-1 block text-left">
+                            参照: {msg.source_name}
+                          </div>
+                        )}
+                    </div>
                   )}
                 </div>
               </div>
@@ -469,39 +574,39 @@ export default function Chat() {
                     <ul>
                       {groupedSessions[groupKey].map((session) => (
                         <li
-                          key={session.session_title}
-                          className={`relative cursor-pointer p-1 hover:bg-gray-100 ${selectedSessionLocal === session.session_title ? 'bg-gray-200' : ''}`}
-                          onClick={() => handleSessionSelect(session.session_title)}
+                          key={session.session_id}
+                          className={`relative cursor-pointer p-1 hover:bg-gray-100 ${selectedSessionLocal === session.session_id ? 'bg-gray-200' : ''}`}
+                          onClick={() => handleSessionSelect(session)}
                         >
                           <div className="flex items-center justify-between">
                             <span className="text-sm truncate">{session.session_title}</span>
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                toggleDropdown(session.session_title);
+                                toggleDropdown(session.session_id);
                               }}
                               className="ml-2 text-gray-500 hover:text-gray-700 text-sm p-1"
                             >
                               ⋮
                             </button>
                           </div>
-                          {openDropdownSession === session.session_title && (
-                            <div className="absolute right-0 mt-1 w-36 bg-white border border-gray-200 rounded shadow-lg z-10">
+                          {openDropdownSession === session.session_id && (
+                            <div className="fixed right-0 mt-1 w-36 bg-white border border-gray-200 rounded shadow-lg z-10">
                               <button
                                 className="block w-full text-left text-sm px-2 py-1 hover:bg-gray-100"
-                                onClick={() => handleMoveProject(session.session_title)}
+                                onClick={() => { handleMoveProject(session); setOpenDropdownSession(null); }}
                               >
                                 プロジェクトの移動
                               </button>
                               <button
                                 className="block w-full text-left text-sm px-2 py-1 hover:bg-gray-100"
-                                onClick={() => handleRenameSession(session.session_title)}
+                                onClick={() => { handleRenameSession(session); setOpenDropdownSession(null); }}
                               >
                                 セッション名称変更
                               </button>
                               <button
                                 className="block w-full text-left text-sm px-2 py-1 hover:bg-gray-100"
-                                onClick={() => handleDeleteSession(session.session_title)}
+                                onClick={() => { handleDeleteSession(session); setOpenDropdownSession(null); }}
                               >
                                 セッション削除
                               </button>

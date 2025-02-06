@@ -4,7 +4,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useState, useEffect } from 'react'
-import { Home, Settings, Layers, FileText, ChartGantt, MessageSquare, Key, ChevronLeft, ChevronRight, Presentation } from 'lucide-react'
+import { Home, Settings, Layers, FileText, ChartGantt, BotMessageSquare, Key, ChevronLeft, ChevronRight, Presentation } from 'lucide-react'
 import useProjectStore from '../store/projectStore';
 import axios from 'axios';
 
@@ -13,7 +13,7 @@ export default function Sidebar() {
   const defaultApiKey = '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'
   const [apiKey, setApiKey] = useState(defaultApiKey)
   const { projects, selectedProject, setProjects, setSelectedProject } = useProjectStore();
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(true);
 
   useEffect(() => {
     fetchProjects();
@@ -82,7 +82,7 @@ export default function Sidebar() {
         } ${isCollapsed ? 'justify-center' : ''}`} // isCollapsed で justify-center を追加
         aria-current={isActive('/manage-documents') ? 'page' : undefined}
       >
-        <MessageSquare className={`mr-2 h-5 w-5 ${isCollapsed ? 'mr-0' : 'mr-2'}`} /> {/* isCollapsed で mr を調整 */}
+        <BotMessageSquare className={`mr-2 h-5 w-5 ${isCollapsed ? 'mr-0' : 'mr-2'}`} /> {/* isCollapsed で mr を調整 */}
         <span className={`${isCollapsed ? 'hidden' : 'inline'}`}>チェンジAI</span> {/* isCollapsed でテキスト表示/非表示を切り替え */}
       </Link>
       <Link

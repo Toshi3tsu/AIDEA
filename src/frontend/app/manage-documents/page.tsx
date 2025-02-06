@@ -4,7 +4,7 @@
 import React, { useEffect, useState } from 'react';
 import ManageDocuments from '../components/ManageDocuments';
 import Chat from '../components/Chat';
-import { MessageSquare, ChevronLeft, ChevronRight } from 'lucide-react';
+import { BotMessageSquare, ChevronLeft, ChevronRight } from 'lucide-react';
 import ReactDOM from 'react-dom/client';
 import useProjectStore from '../store/projectStore';
 
@@ -19,7 +19,7 @@ export default function ManageDocumentsPage() {
     iconContainer.innerHTML = '';
     const icon = document.createElement('div');
     const root = ReactDOM.createRoot(icon);
-    root.render(<MessageSquare className="h-5 w-5" />);
+    root.render(<BotMessageSquare className="h-5 w-5" />);
     iconContainer.appendChild(icon);
   }, []);
 

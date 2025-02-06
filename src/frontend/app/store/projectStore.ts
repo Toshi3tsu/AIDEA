@@ -3,6 +3,7 @@ import { create } from 'zustand';
 
 export interface SessionItem {
   session_title: string;
+  session_id: number;
   latest_timestamp: string;
 }
 
@@ -17,6 +18,7 @@ interface Project {
   slack_channel_id: string;
   slack_tag: string;
   box_folder_id: string;
+  box_folder_path: string;
   schedule: string;
 }
 

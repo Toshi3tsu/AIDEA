@@ -1,9 +1,10 @@
 # src/backend/api/chat_history.py
 from fastapi import APIRouter, HTTPException, Depends
-from pydantic import BaseModel
-from typing import List
+from pydantic import BaseModel, validator
+from typing import List, Union, Optional
 import os
-from datetime import datetime as dt
+import re
+from datetime import datetime
 import logging
 import asyncio
 
@@ -15,14 +16,28 @@ router = APIRouter()
 class MessageItem(BaseModel):
     sender: str
     message: str
-    timestamp: dt
+    timestamp: datetime
+    source_name: Optional[Union[str, List[str]]] = None
+    source_path: Optional[str] = None
+    source_ids: Optional[List[str]] = None
+
+    @validator('timestamp', pre=True)
+    def parse_timestamp(cls, value):
+        # valueが文字列の場合、末尾の 'Z' を '+00:00' に置き換えてパースする
+        if isinstance(value, str):
+            # 'Z' があれば置換
+            value = re.sub(r'Z$', '+00:00', value)
+            return datetime.fromisoformat(value)
+        return value
 
 # 新たにセッション情報を返すためのモデルを定義
 class SessionItem(BaseModel):
     session_title: str
-    latest_timestamp: dt
+    session_id: int
+    latest_timestamp: datetime
 
 class SaveChatRequest(BaseModel):
+    session_id: int
     project_id: int
     session_title: str
     messages: List[MessageItem]
@@ -46,24 +61,21 @@ def _write_messages_to_db(request: SaveChatRequest):
     db = SessionLocal()  # 新しいセッションをこのスレッド内で生成する
     try:
         for msg in request.messages:
-            # ISO形式の文字列（例："2025-02-03T01:32:00.715Z"）の末尾の 'Z' を除去
-            timestamp_str = msg.timestamp.rstrip("Z")
-            try:
-                # 文字列を datetime オブジェクトに変換
-                timestamp_dt = dt.fromisoformat(timestamp_str)
-            except Exception as e:
-                # 変換に失敗した場合は、UTCの現在時刻を利用する
-                timestamp_dt = dt.utcnow()
+            timestamp = msg.timestamp
 
             # ChatHistoryのインスタンスを生成
             db_chat_history = ChatHistory(
+                session_id=request.session_id,
                 project_id=request.project_id,
                 user_id='user_888',  # 固定のユーザーID
                 session_title=request.session_title,
                 # モデルでは timestamp を文字列として保存している場合は、isoformat()で文字列に変換
-                timestamp=timestamp_dt,
+                timestamp=timestamp,
                 sender=msg.sender,
-                message=msg.message
+                message=msg.message,
+                source_name=msg.source_name,
+                source_path=msg.source_path,
+                source_ids=msg.source_ids
             )
             db.add(db_chat_history)
         db.commit()
@@ -73,19 +85,22 @@ def _write_messages_to_db(request: SaveChatRequest):
     finally:
         db.close()
 
-@router.get("/history/{project_id}/{session_title}", response_model=List[MessageItem])
-async def get_chat_history(project_id: int, session_title: str, db: Session = Depends(get_db)):
+@router.get("/history/{project_id}/{session_id}", response_model=List[MessageItem])
+async def get_chat_history(project_id: int, session_id: int, db: Session = Depends(get_db)):
     records = []
     try:
         db_records = db.query(ChatHistory).filter(
             ChatHistory.project_id == project_id,
-            ChatHistory.session_title == session_title
+            ChatHistory.session_id == session_id
         ).all()
         for record in db_records:
             records.append(MessageItem(
                 sender=record.sender,
                 message=record.message,
-                timestamp=record.timestamp
+                timestamp=record.timestamp,
+                source_name=record.source_name,
+                source_path=record.source_path,
+                source_ids=record.source_ids
             ))
         return records
     except Exception as e:
@@ -95,24 +110,32 @@ async def get_chat_history(project_id: int, session_title: str, db: Session = De
 async def get_session_titles(project_id: int, db: Session = Depends(get_db)):
     sessions = {}
     try:
-        db_records = db.query(ChatHistory).filter(ChatHistory.project_id == project_id).all()
+        db_records = db.query(ChatHistory).filter(ChatHistory.project_id == project_id).distinct(ChatHistory.session_id).all()
         for record in db_records:
-            session = record.session_title
+            session_id = record.session_id
+            latest_record = db.query(ChatHistory).filter(
+                ChatHistory.project_id == project_id,
+                ChatHistory.session_id == session_id # session_id でフィルタ
+            ).order_by(ChatHistory.timestamp.desc()).first()
+            session_title = latest_record.session_title if latest_record else "No Title"
             timestamp = record.timestamp
-            if session not in sessions or sessions[session] < timestamp:
-                sessions[session] = timestamp
+            sessions[session_id] = {"title": session_title, "timestamp": timestamp}
         # タイムスタンプが新しい順にソートしてセッション一覧を作成
-        sorted_sessions = sorted(sessions.items(), key=lambda x: x[1], reverse=True)
-        return [SessionItem(session_title=session, latest_timestamp=timestamp) for session, timestamp in sorted_sessions]
+        sorted_sessions = sorted(sessions.items(), key=lambda item: item[1]["timestamp"], reverse=True)
+        return [SessionItem(
+            session_title=session_data["title"],
+            latest_timestamp=session_data["timestamp"],
+            session_id=session_id # session_id をレスポンスに含める
+        ) for session_id, session_data in sorted_sessions]
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.put("/rename")
-async def rename_session(project_id: int, old_title: str, new_title: str, db: Session = Depends(get_db)):
+async def rename_session(project_id: int, session_id: int, new_title: str, db: Session = Depends(get_db)):
     try:
         db_records = db.query(ChatHistory).filter(
             ChatHistory.project_id == project_id,
-            ChatHistory.session_title == old_title
+            ChatHistory.session_id == session_id # session_id でフィルタリング
         ).all()
         if not db_records:
             raise HTTPException(status_code=404, detail="該当するセッションが見つかりません")
@@ -121,16 +144,16 @@ async def rename_session(project_id: int, old_title: str, new_title: str, db: Se
             record.session_title = new_title
         db.commit()
 
-        return {"detail": "セッション名が変更されました", "old_title": old_title, "new_title": new_title}
+        return {"detail": "セッション名が変更されました", "session_id": session_id, "new_title": new_title} # session_id を返す
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.delete("/delete")
-async def delete_session(project_id: int, session_title: str, db: Session = Depends(get_db)):
+async def delete_session(project_id: int, session_id: int, db: Session = Depends(get_db)):
     try:
         db_records = db.query(ChatHistory).filter(
             ChatHistory.project_id == project_id,
-            ChatHistory.session_title == session_title
+            ChatHistory.session_id == session_id
         ).all()
         if not db_records:
             raise HTTPException(status_code=404, detail="該当するセッションが見つかりません")
@@ -139,16 +162,16 @@ async def delete_session(project_id: int, session_title: str, db: Session = Depe
             db.delete(record)
         db.commit()
 
-        return {"detail": "セッションが削除されました", "session_title": session_title}
+        return {"detail": "セッションが削除されました", "session_id": session_id} # session_id を返す
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.put("/move")
-async def move_session(old_project_id: int, new_project_id: int, session_title: str, db: Session = Depends(get_db)):
+async def move_session(old_project_id: int, new_project_id: int, session_id: int, db: Session = Depends(get_db)):
     try:
         db_records = db.query(ChatHistory).filter(
             ChatHistory.project_id == old_project_id,
-            ChatHistory.session_title == session_title
+            ChatHistory.session_id == session_id
         ).all()
         if not db_records:
             raise HTTPException(status_code=404, detail="該当するセッションが見つかりません")
@@ -157,6 +180,6 @@ async def move_session(old_project_id: int, new_project_id: int, session_title: 
             record.project_id = new_project_id
         db.commit()
 
-        return {"detail": "セッションのプロジェクトが移動されました", "session_title": session_title, "new_project_id": new_project_id}
+        return {"detail": "セッションのプロジェクトが移動されました", "session_id": session_id, "new_project_id": new_project_id} # session_id を返す
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
