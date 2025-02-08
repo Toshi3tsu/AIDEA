@@ -10,6 +10,7 @@ interface Task {
   title: string;
   tag: '新規作成' | '更新' | 'クローズ';
   assignee: string;
+  start_date: string; // YYYY-MM-DD形式を想定
   due_date: string; // YYYY-MM-DD形式を想定
   detail: string;
 }
@@ -52,6 +53,7 @@ const TaskExtractionModal: React.FC<TaskExtractionModalProps> = ({
       title: '',
       tag: '新規作成',
       assignee: '',
+      start_date: '',
       due_date: '',
       detail: '',
     };
@@ -61,7 +63,7 @@ const TaskExtractionModal: React.FC<TaskExtractionModalProps> = ({
   // タスク登録（タスクの紐づけ）時の処理
   const handleTaskLink = () => {
     setExtractedTasks(tasks);
-    router.push('/project-management');
+    router.push('/components/project-management/TaskList');
   };
 
   return (

@@ -11,9 +11,17 @@ from api.projects import read_projects, write_projects
 import pandas as pd
 from sqlalchemy.orm import Session, declarative_base
 from database import get_db, Project, UploadedFile
+import fitz  # PyMuPDF
 import json
 import re
 import requests
+from pptx import Presentation
+try:
+    import pytesseract
+    from PIL import Image
+except ImportError:
+    # OCRを利用しない場合は、必要に応じてpytesseractとPillowをインストールしてください
+    pytesseract = None
 
 router = APIRouter()
 
@@ -198,21 +206,61 @@ def download_file(file_url: str, local_path: str):
     else:
         raise HTTPException(status_code=400, detail="ファイルのダウンロードに失敗しました。")
 
-import fitz  # PyMuPDF
-
 def extract_text_from_pdf(file_path: str) -> str:
+    """
+    PDFからテキストを抽出する関数
+      - まず PyMuPDF でテキスト抽出を試みる。
+      - テキストが空の場合は、OCRを用いて画像から文字認識を行う（pytesseract 必要）。
+      - 抽出結果からハイフン改行や不要な改行を除去する。
+      - 各ページの冒頭にページ番号「Page N:」を付与し、ページ間は2改行で区切る。
+    """
     extracted_text = ""
-    with fitz.open(file_path) as doc:
-        for page in doc:
-            page_text = page.get_text("text")  # テキスト抽出
-            # 不要な部分を削除（メタデータやオブジェクトIDなど）
-            clean_text = remove_pdf_noise(page_text)
-            extracted_text += clean_text + "\n"
+    try:
+        with fitz.open(file_path) as doc:
+            for page_num, page in enumerate(doc, start=1):
+                try:
+                    # まずテキスト抽出を試行
+                    page_text = page.get_text("text")
+                except Exception as e:
+                    page_text = ""
+                
+                # テキストが十分でない場合、OCRにフォールバック
+                if not page_text.strip() and pytesseract is not None:
+                    try:
+                        pix = page.get_pixmap()
+                        img_data = pix.tobytes()  # 画像データをバイト列として取得
+                        img = Image.open(io.BytesIO(img_data))
+                        page_text = pytesseract.image_to_string(img)
+                    except Exception as ocr_e:
+                        # OCR処理でもエラーの場合は、空文字のまま次へ
+                        page_text = ""
+                
+                # ノイズ除去・ハイフンや改行の処理
+                page_text = remove_pdf_noise(page_text)
+                
+                # ページ番号を先頭に付与
+                page_text = f"Page {page_num}:\n" + page_text.strip()
+                
+                # ページごとに2改行で区切って連結
+                extracted_text += page_text + "\n\n"
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"PDFの処理に失敗しました: {e}")
+    
     return extracted_text
 
 def remove_pdf_noise(text: str) -> str:
-    # PDFのメタデータやオブジェクトIDなどを正規表現で削除
+    """
+    PDF固有のノイズを除去し、ハイフン改行や不要な改行を整形する関数
+      - "trailer" や "%%EOF" の除去
+      - 行末のハイフンと改行（例: "ex-\ntraction"）を単語として連結
+      - シングル改行はスペースに置換し、段落（2連続改行）は維持する
+    """
+    # 不要な文字列の除去
     text = text.replace("trailer", "").replace("%%EOF", "").strip()
+    # ハイフンで改行されている箇所を結合（例："ex-\ntraction" → "extraction"）
+    text = re.sub(r'-\n', '', text)
+    # シングル改行（改行記号の前後が改行でない場合）をスペースに置換
+    text = re.sub(r'(?<!\n)\n(?!\n)', ' ', text)
     return text
 
 # ファイルパスをUTF-8でデコードする
@@ -268,6 +316,70 @@ async def extract_text_from_file(project_id: int, filename: str, db: Session = D
         with open(file_path, 'r', encoding='utf-8') as file:
             boxnote_json = json.load(file)
             extracted_text = boxnote_json_to_markdown(boxnote_json)
+    # PowerPoint（ppt, pptx）の場合
+    elif file_extension in ['ppt', 'pptx']:
+        try:
+            from pptx.enum.shapes import PP_PLACEHOLDER
+            prs = Presentation(file_path)
+            slide_texts = []
+            for i, slide in enumerate(prs.slides):
+                # シェイプを上から順、かつ左から順にソート（テキストが空でないもの）
+                sorted_shapes = sorted(
+                    [shape for shape in slide.shapes if hasattr(shape, "text") and shape.text.strip()],
+                    key=lambda s: (s.top, s.left)
+                )
+                
+                title_text = ""
+                subtitle_text = ""
+                content_parts = []
+                
+                # プレースホルダーや名称で判定して、タイトル、サブタイトル／メッセージラインを抽出
+                for shape in sorted_shapes:
+                    # プレースホルダー判定
+                    if shape.is_placeholder:
+                        ph_type = shape.placeholder_format.type
+                        if ph_type in [PP_PLACEHOLDER.TITLE, PP_PLACEHOLDER.CENTER_TITLE]:
+                            if not title_text:
+                                title_text = shape.text.strip()
+                            continue
+                        elif ph_type == PP_PLACEHOLDER.SUBTITLE:
+                            if not subtitle_text:
+                                subtitle_text = shape.text.strip()
+                            continue
+                    # シェイプ名によるヒューリスティック判定
+                    name_lower = shape.name.lower() if hasattr(shape, "name") else ""
+                    if "title" in name_lower and not title_text:
+                        title_text = shape.text.strip()
+                        continue
+                    if "subtitle" in name_lower and not subtitle_text:
+                        subtitle_text = shape.text.strip()
+                        continue
+                    # 上記に該当しないものは、コンテンツとして扱う
+                    content_parts.append(shape.text.strip())
+                
+                # もしタイトルもサブタイトルも取得できなかった場合は、単純にソート結果の全テキストを連結して出力する（フォールバック）
+                if not title_text and not subtitle_text:
+                    fallback_text = "\n".join([shape.text.strip() for shape in sorted_shapes])
+                    slide_texts.append(fallback_text)
+                else:
+                    # 表紙か通常スライドかの判断（ヒューリスティック例）
+                    # → タイトルとサブタイトルがあり、かつコンテンツがほぼ無い、または最初のスライドなら表紙とする
+                    if title_text and subtitle_text and (len(content_parts) == 0 or i == 0):
+                        slide_text = f"{title_text}\n{subtitle_text}"
+                    else:
+                        page_number = i + 1  # ページ番号（1オリジン）
+                        lines = []
+                        if title_text:
+                            lines.append(f"{page_number} {title_text}")
+                        if subtitle_text:
+                            lines.append(subtitle_text)
+                        if content_parts:
+                            lines.extend(content_parts)
+                        slide_text = "\n".join(lines)
+                    slide_texts.append(slide_text)
+            extracted_text = "\n\n".join(slide_texts)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"PowerPointファイルの処理に失敗しました: {e}")
     else:
         with open(file_path, 'r', encoding='utf-8') as file:
             extracted_text = file.read()
@@ -280,7 +392,7 @@ async def extract_text_from_file(project_id: int, filename: str, db: Session = D
         # ファイルがDBに存在しない場合は、processed=Trueとprocessed_textを設定して新規作成 (通常はlist-local-filesで事前登録されるはず)
         new_file = UploadedFile(
             source_name=filename,
-            source_path=file_path, # フルパスを保存
+            source_path=file_path,  # フルパスを保存
             project_id=project_id,
             creation_date=datetime.utcnow(),
             processed=True,

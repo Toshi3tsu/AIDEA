@@ -5,10 +5,15 @@ import React, { useState, useRef, useEffect } from 'react';
 import useProjectStore from '../store/projectStore';
 import { ChartBar } from 'lucide-react';
 import ReactDOM from 'react-dom/client';
+import TaskList from '../components/project-management/TaskList';
+import TaskForm from '../components/project-management/TaskForm';
+import GanttChart from '../components/project-management/GanttChart';
 
-interface Task {
+// Task型をexportする
+export interface Task {
   title: string;
   assignee: string;
+  start_date: string;
   due_date: string;
   detail: string;
   tag: '新規作成' | '更新' | 'クローズ' | '無視' | '';
@@ -16,195 +21,49 @@ interface Task {
 
 export default function ProjectManagement() {
   useEffect(() => {
-        document.querySelector('.page-title')!.textContent = 'プロジェクト管理AI @ Powered by Planner';
-        const iconContainer = document.querySelector('.page-icon')!;
-        iconContainer.innerHTML = '';
-        const icon = document.createElement('div');
-        const root = ReactDOM.createRoot(icon); // root を作成
-        root.render(<ChartBar className="h-5 w-5" />); // root の render メソッドを使用
-        iconContainer.appendChild(icon);
-      }, []);
+    document.querySelector('.page-title')!.textContent = 'プロジェクト管理AI';
+    const iconContainer = document.querySelector('.page-icon')!;
+    iconContainer.innerHTML = '';
+    const icon = document.createElement('div');
+    const root = ReactDOM.createRoot(icon);
+    root.render(<ChartBar className="h-5 w-5" />);
+    iconContainer.appendChild(icon);
+  }, []);
   const { extractedTasks } = useProjectStore();
 
   const [currentTasks, setCurrentTasks] = useState<Task[]>([
-    { title: '既存タスクA', assignee: '山田', due_date: '2025-02-01', detail: '詳細A', tag: '' },
-    { title: '既存タスクB', assignee: '鈴木', due_date: '2025-02-15', detail: '詳細B', tag: '' },
+    { title: '既存タスクA', assignee: '山田', start_date: '2025-02-08', due_date: '2025-02-11', detail: '詳細A', tag: '' },
+    { title: '既存タスクB', assignee: '鈴木', start_date: '2025-02-08', due_date: '2025-02-15', detail: '詳細B', tag: '' },
   ]);
 
-  const [linkedPairs, setLinkedPairs] = useState<{ extractedIndex: number; currentIndex: number }[]>([]);
-
-  // ドットの参照用 ref
-  const leftDotRefs = useRef<(HTMLDivElement | null)[]>([]);
-  const rightDotRefs = useRef<(HTMLDivElement | null)[]>([]);
-
-  const handleDotClick = (index: number, type: 'extracted' | 'current') => {
-    if (type === 'extracted') {
-      setLinkedPairs((prev) =>
-        prev.some((pair) => pair.extractedIndex === index)
-          ? prev.filter((pair) => pair.extractedIndex !== index)
-          : [...prev, { extractedIndex: index, currentIndex: -1 }]
-      );
-    } else if (type === 'current') {
-      setLinkedPairs((prev) =>
-        prev.map((pair) =>
-          pair.currentIndex === -1 ? { ...pair, currentIndex: index } : pair
-        )
-      );
-    }
+  const handleAddTask = (newTask: Task) => {
+    setCurrentTasks([...currentTasks, newTask]);
   };
-
-  const handleLinkTasks = () => {
-    const updatedTasks = [...currentTasks];
-    const newTasks = [];
-
-    linkedPairs.forEach(({ extractedIndex, currentIndex }) => {
-      const extractedTask = extractedTasks[extractedIndex];
-
-      if (currentIndex !== -1) {
-        // 上書き
-        updatedTasks[currentIndex] = { ...extractedTask };
-      } else if (extractedTask?.tag === '新規作成') {
-        // 新規追加
-        newTasks.push(extractedTask);
-      }
-    });
-
-    setCurrentTasks([...updatedTasks, ...newTasks]);
-    alert('タスクの紐づけが完了しました。');
-  };
-
-  const renderLinkLines = () => {
-    const [svgRect, setSvgRect] = useState<DOMRect | null>(null);
-  
-    // クライアントサイドで実行時にSVG要素の位置を取得
-    useEffect(() => {
-      const svgElement = document.querySelector('svg');
-      if (svgElement) {
-        setSvgRect(svgElement.getBoundingClientRect());
-      }
-    }, []);
-  
-    if (!svgRect) return null; // サーバーサイドでのレンダリングやSVG未取得時は描画しない
-  
-    return linkedPairs.map((pair, index) => {
-      const leftDot = leftDotRefs.current[pair.extractedIndex];
-      const rightDot = pair.currentIndex !== -1 ? rightDotRefs.current[pair.currentIndex] : null;
-  
-      if (!leftDot) return null;
-  
-      // 左側のドット位置を取得
-      const leftRect = leftDot.getBoundingClientRect();
-      const startX = leftRect.left + leftRect.width / 2 - svgRect.left;
-      const startY = leftRect.top + leftRect.height / 2 - svgRect.top;
-  
-      // 右側のドット位置を取得
-      let endX = startX;
-      let endY = startY;
-      if (rightDot) {
-        const rightRect = rightDot.getBoundingClientRect();
-        endX = rightRect.left + rightRect.width / 2 - svgRect.left;
-        endY = rightRect.top + rightRect.height / 2 - svgRect.top;
-      }
-  
-      return (
-        <line
-          key={index}
-          x1={startX}
-          y1={startY}
-          x2={endX}
-          y2={endY}
-          stroke="black"
-          strokeWidth={2}
-        />
-      );
-    });
-  };
-
-  const canSelectExtractedTask = (task: Task) =>
-    task.tag === '更新' || task.tag === 'クローズ';
 
   return (
-    <div className="p-6 h-screen overflow-y-auto">
-      <div className="relative flex space-x-8">
-        {/* 左側のタスク（抽出されたタスク） */}
-        <div className="w-1/2">
-          <h2 className="text-xl font-semibold mb-2">抽出されたタスク</h2>
-          <ul className="border p-2 rounded">
-            {extractedTasks.map((task, index) => (
-              <li
-                key={index}
-                className={`mb-4 border-b pb-2 flex items-center ${
-                  canSelectExtractedTask(task) ? '' : 'opacity-50'
-                }`}
-              >
-                <div className="flex-grow">
-                  <div className="font-medium">{task.title}</div>
-                  <div>担当: {task.assignee}</div>
-                  <div>期限: {task.due_date}</div>
-                  <div>詳細: {task.detail}</div>
-                  <div>タグ: {task.tag}</div>
-                </div>
-                <div
-                  ref={(el) => (leftDotRefs.current[index] = el)} // 左側のドットの ref
-                  className={`w-4 h-4 rounded-full bg-blue-500 cursor-pointer ${
-                    linkedPairs.some((pair) => pair.extractedIndex === index)
-                      ? 'bg-blue-700'
-                      : ''
-                  }`}
-                  onClick={() =>
-                    canSelectExtractedTask(task) && handleDotClick(index, 'extracted')
-                  }
-                />
-              </li>
-            ))}
-          </ul>
+    <div className="p-6 h-full">
+      <div className="flex flex-col h-full">
+        {/* 上側のタスクリストをDHTMLX Ganttチャートに変更 */}
+        <div className="h-1/3 overflow-y-auto mb-6">
+          <GanttChart currentTasks={currentTasks} /> {/* GanttChartDhtmlx を使用 */}
         </div>
 
-        {/* SVGを使用して線を描画 */}
-        <svg
-          className="absolute"
-          style={{ left: 0, top: 0, width: '100%', height: '100%', pointerEvents: 'none' }}
-        >
-          {renderLinkLines()}
-        </svg>
+        {/* 下側の領域を左右に分割 */}
+        <div className="h-2/3 flex space-x-8">
+          {/* 左側のタスクリスト (TaskList) */}
+          <div className="w-2/3 overflow-y-auto">
+            <TaskList
+              extractedTasks={extractedTasks || []} // extractedTasks が undefined の場合を考慮
+              currentTasks={currentTasks}
+              setCurrentTasks={setCurrentTasks}
+            />
+          </div>
 
-        {/* 右側のタスク（現在のタスク） */}
-        <div className="w-1/2">
-          <h2 className="text-xl font-semibold mb-2">現在のタスク</h2>
-          <ul className="border p-2 rounded">
-            {currentTasks.map((task, index) => (
-              <li
-                key={index}
-                className="mb-4 border-b pb-2 flex items-center"
-              >
-                <div
-                  ref={(el) => (rightDotRefs.current[index] = el)} // 右側のドットの ref
-                  className={`w-4 h-4 rounded-full bg-green-500 cursor-pointer ${
-                    linkedPairs.some((pair) => pair.currentIndex === index)
-                      ? 'bg-green-700'
-                      : ''
-                  }`}
-                  onClick={() => handleDotClick(index, 'current')}
-                />
-                <div className="flex-grow ml-2">
-                  <div className="font-medium">{task.title}</div>
-                  <div>担当: {task.assignee}</div>
-                  <div>期限: {task.due_date}</div>
-                  <div>詳細: {task.detail}</div>
-                </div>
-              </li>
-            ))}
-          </ul>
+          {/* 右側のタスク登録フォーム (TaskForm) */}
+          <div className="w-1/3 overflow-y-auto">
+            <TaskForm onTaskAdd={handleAddTask} />
+          </div>
         </div>
-      </div>
-
-      <div className="flex justify-center mt-4">
-        <button
-          onClick={handleLinkTasks}
-          className="px-4 py-2 bg-[#BF4242] text-white rounded hover:bg-[#A53939]"
-        >
-          タスクの紐づけを行う
-        </button>
       </div>
     </div>
   );

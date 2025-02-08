@@ -3,51 +3,59 @@
 
 ## 概要
 
-AIDEAは、顧客情報やステークホルダー情報を基に業務フローを可視化し、ボトルネックを特定しながら最適なソリューション提案を行うためのツールです。Next.js + Tailwind CSSで構築されたフロントエンドと、FastAPIで実装されたバックエンドから構成されます。
-以前はPoC（Proof of Concept）段階でデータをCSV管理していましたが、現在は**データ管理をPostgreSQLに移行**し、より安定した運用基盤を構築しています。具体的には、**projects、solutions、news**に加えて、**アップロードファイル（uploaded_files）**もPostgreSQLで管理しています。
+AIDEAは、顧客情報やステークホルダー情報を基に業務フローを可視化し、ボトルネックを特定しながら最適なソリューション提案を行うためのツールです。Next.js + Tailwind CSSで構築されたフロントエンドと、FastAPIで実装されたバックエンドから構成されます。  
+以前はPoC（Proof of Concept）段階でデータをCSV管理していましたが、現在は**データ管理をPostgreSQLに移行**し、より安定した運用基盤を構築しています。具体的には、**projects、solutions、news**に加えて、**アップロードファイル（uploaded_files）**、**チャット履歴**、**プロジェクトタスク（project_tasks）**などをPostgreSQLで管理しています。
 
 ## 主な機能
 
-- **ビジネスフロー可視化**
+- **ビジネスフロー可視化**  
   顧客情報と課題を入力すると、自動的に詳細な業務フローを生成します。
 
-- **ソリューション最適化**
+- **ソリューション最適化**  
   複数の業務レイヤーを考慮しながら、最適なソリューションや改善方法を提案します。
 
-- **提案資料作成（PowerPoint）**
-  - LLMとテンプレートを用いてPowerPoint資料を自動生成
-  - 顧客情報や課題、提案内容をスライドに自動反映
+- **提案資料作成（PowerPoint）**  
+  - LLMとテンプレートを用いてPowerPoint資料を自動生成  
+  - 顧客情報や課題、提案内容をスライドに自動反映  
   - BPMNダイアグラムをスライド内に埋め込み
 
-- **タスク抽出・管理**
-  - LLMを使用したドキュメントからのタスク抽出
-  - タスクのタグ付け（新規作成／更新／クローズ／無視）と修正
+- **タスク抽出・管理**  
+  - LLMを使用したドキュメントからのタスク抽出  
+  - タスクのタグ付け（新規作成／更新／クローズ／無視）と修正  
   - Planner連携によるプロジェクト管理へのタスク反映
 
-- **Research AI**
-  - 複数のLLM（GPT-4o、DeepSeek V3、Perplexityなど）を並列実行
+- **Research AI**  
+  - 複数のLLM（GPT-4o、DeepSeek V3、Perplexityなど）を並列実行  
   - 研究結果をMarkdown形式で表示し、モデルごとにトグルで切り替え可能
 
-- **ファイル確認機能・テキスト抽出機能**
-  - Boxと連携してアップロードファイルの所在や内容を確認
-  - **バックエンドでテキスト抽出処理を実行**し、**キャッシュ機能により高速化**
-  - **フロントエンドで複数ファイルの同時選択**に対応
+- **ファイル確認機能・テキスト抽出機能**  
+  - Boxと連携してアップロードファイルの所在や内容を確認  
+  - **バックエンドでテキスト抽出処理を実行**し、**キャッシュ機能により高速化**  
+  - **フロントエンドで複数ファイルの同時選択**に対応  
+  - テキスト抽出対象ファイルは、**txt、Boxnote、pdfに加え、pptもサポート**  
   - ファイル管理とテキストデータ活用をシームレスに行えるように拡張
 
-- **チャット履歴管理（日時ごとセクション）**
+- **チャット機能**  
+  - **文脈を踏まえた会話**が可能なLLMチャットシステムを実装  
+  - ファイルテキストからの回答もサポートし、ユーザーの意図に沿った情報提供を実現  
+  - **チャットの状態保持をバックエンドのデータベースに移行**し、セッション管理と履歴の永続化を強化
+
+- **チャット履歴管理（日時ごとセクション）**  
   - チャット履歴を日付単位で区切り、過去の会話を整理して閲覧可能
 
-- **ナビゲーションバーでのプロジェクト名・モデル名選択**
+- **ナビゲーションバーでのプロジェクト名・モデル名選択**  
   - 画面上部のナビゲーションバーで現在の「プロジェクト名」や「使用するモデル」を切り替え
 
-- **Azure OpenAI のモデル追加**
-  - モデル一覧にAzure OpenAIのサポートを追加
+- **Azure OpenAI のモデル追加**  
+  - モデル一覧にAzure OpenAIのサポートを追加  
   - 選択したモデルに応じてLLMのエンドポイントを切り替えて使用可能
 
-- **ExcelファイルのLLMバッチ処理**
-  - Excelファイルを一括で読み込み、LLMによるタスク抽出やデータ変換をバッチ処理で実行
+- **ExcelファイルのLLMバッチ処理**  
+  - Excelファイルを一括で読み込み、LLMによるタスク抽出やデータ変換をバッチ処理で実行  
   - フロントエンドで処理状況をモニタリング
 
+- **プロジェクト管理機能の拡張**  
+  - 従来のタスク管理に加え、**ガントチャートを追加**し、プロジェクト全体の進捗とタスクの依存関係を可視化
 
 ## プロジェクト構成
 
@@ -70,7 +78,8 @@ project_root/
 │   │   │   ├── RightSidebar.tsx
 │   │   │   ├── ScheduleComponent.tsx
 │   │   │   ├── Sidebar.tsx
-│   │   │   └── TaskExtractionModal.tsx
+│   │   │   ├── TaskExtractionModal.tsx
+│   │   │   └── GanttChart.tsx         # ガントチャートコンポーネント追加
 │   │   ├── create-project/
 │   │   │   └── page.tsx
 │   │   ├── generate/
@@ -91,8 +100,10 @@ project_root/
 │   │   ├── store/
 │   │   │   ├── chatStore.tsx
 │   │   │   ├── flowStore.tsx
-│   │   │   ├── modelStore
+│   │   │   ├── modelStore/
 │   │   │   └── projectStore.ts
+│   │   ├── types/                     # 型定義の共有ディレクトリを新設（ローカル型から共有型へ移行）
+│   │   │   └── sharedTypes.ts
 │   │   ├── globals.css
 │   │   ├── layout.tsx
 │   │   ├── page.tsx
@@ -128,11 +139,7 @@ project_root/
 │
 ├── data/
 │   ├── uploads/
-│   ├── template.pptx
-│   ├── chat_history.csv
-│   ├── files.csv
-│   ├── notes.csv
-│   └── (projects.csv, solutions.csv, news.csv はPostgreSQLに移行済み)
+│   └── template.pptx
 │
 └── README.md
 ```
@@ -184,7 +191,7 @@ npm run dev
 
 2. `.env`ファイルを作成し、OpenAI APIキーや他の認証情報を設定
 
-   ```
+   ```dotenv
    OPENAI_API_KEY=your_openai_api_key_here
    DATABASE_URL=postgresql://user:password@localhost:5432/your_db
    ```
@@ -226,18 +233,13 @@ npm run dev
   | id  | sourcename | sourcepath | project_id | creation_date | processed | processed_text |
   |-----|------------|------------|------------|---------------|-----------|----------------|
 
-（CSVでの管理を廃止し、PostgreSQLへ移行済み。migrations/env.py でスキーマ定義を管理）
+- **project_tasks**  
+  | id  | project_id | user_id | title | assignee | start_date | due_date | detail | tag |
+  |-----|------------|---------|-------|----------|------------|----------|--------|-----|
 
-### chat_history.csv
-
-| project_id | user_id | session_title | timestamp          | sender | message     |
-|------------|---------|---------------|--------------------|--------|-------------|
-
-### notes.csv
-
-| project_id | concept_text  | design_notes  |
-|------------|---------------|---------------|
-
+- **chat_history**  
+  | id  | project_id | user_id | session_title | timestamp | sender | message | session_id | source_path | source_ids | source_name |
+  |-----|------------|---------|---------------|-----------|--------|---------|------------|-------------|------------|-------------|
 
 ---
 
@@ -250,71 +252,72 @@ npm run dev
 5. **Research AI**画面で複数LLMによる調査を実施
 6. **Manage Documents**画面でドキュメントを**複数**選択し、テキスト抽出機能とタスク抽出機能（「タスク抽出」ボタン）を使用
 7. 抽出されたタスクをタグ付けし、Planner連携でプロジェクト管理へ反映
-8. **Project Management**画面でタスクを管理
-9. **Settings**画面でソリューションや認証設定を調整
-10. **ExcelファイルのLLMバッチ処理**機能を活用し、大量のデータを一括分析
+8. **Project Management**画面でタスク管理や**ガントチャート**による進捗確認を実施
+9. **チャット機能**により、文脈を踏まえた会話やファイルテキストを元にした回答を利用  
+   ※ チャット履歴はバックエンドのSQLテーブル（chat_history）に保存
+10. **Settings**画面でソリューションや認証設定を調整
+11. **ExcelファイルのLLMバッチ処理**機能を活用し、大量のデータを一括分析
 
 ---
 
 ## 変更点・拡張機能
 
-- **CSVからPostgreSQLへの移行**
-  - `projects.csv`, `solutions.csv`, `news.csv`、**`files.csv`** をDB管理に変更
-  - テーブル名を `files.csv` から **`uploaded_files`** に変更
+- **CSVからPostgreSQLへの移行**  
+  - `projects.csv`, `solutions.csv`, `news.csv`、**`files.csv`** をDB管理に変更  
+  - テーブル名を `files.csv` から **`uploaded_files`** に変更  
   - Alembic等でマイグレーションを管理し、PoCフェーズから本番運用を見据えた構成へ
 
-- **Box連携の実装（ファイル確認機能）**
-  - Box APIと連携し、ファイル管理を強化
-  - ファイルの所在と内容を確認しやすくなり、コラボレーションが容易に
+- **型定義のローカル型から共有型への移行**  
+  - フロントエンドでの型定義を `src/frontend/types/` 配下に集約し、各コンポーネントやAPI呼び出しで共有可能な形に再構成
 
-- **チャット履歴に日付ごとのセクション追加**
-  - チャットログを日付単位でセクションに分割し、過去の会話を整理
+- **Box連携の実装強化**  
+  - Box APIと連携し、ファイル管理を強化  
+  - テキスト抽出対象のファイル形式に、従来のtxt、Boxnote、pdfに加え、**ppt形式を追加**  
+  - バックエンドでのテキスト抽出処理とキャッシュ機能により、処理の高速化と安定性を向上
 
-- **プロジェクト名・モデル名の選択をナビゲーションバーに移動**
-  - 常に画面上部でプロジェクトやLLMモデルの切り替えが可能に
+- **チャット機能の拡張**  
+  - LLMを利用した**文脈を踏まえた会話機能**を実装し、より自然な対話を実現  
+  - ファイルテキストからの回答機能を追加し、関連情報の提示を強化  
+  - **チャットの状態保持をバックエンドDB（SQLのchat_historyテーブル）へ移行**し、セッション管理の永続性と信頼性を向上
 
-- **モデルにAzure OpenAIを追加**
-  - LLMオプションにAzure OpenAIを追加し、ニーズに合わせて選択可能に
+- **プロジェクト管理機能へのガントチャート追加**  
+  - プロジェクト進捗とタスクの依存関係を視覚化するため、**ガントチャートコンポーネントを実装**  
+  - ユーザーはプロジェクト管理画面でガントチャートにより全体スケジュールを把握可能
 
-- **ExcelファイルのLLMバッチ処理を追加**
-  - Excelファイルを一括で読み取り、LLMによる分析・タスク抽出を自動化
-  - 大規模データの取り扱いが容易に
+- **新規テーブルの追加**  
+  - **project_tasks**  
+    - タスク管理をより詳細に行うため、`id, project_id, user_id, title, assignee, start_date, due_date, detail, tag` の項目を持つテーブルをSQL上に作成  
+  - **chat_history**  
+    - チャット履歴の管理をCSVからSQLに移行。`id, project_id, user_id, session_title, timestamp, sender, message, session_id, source_path, source_ids, source_name` の項目で管理
 
-- **テキスト抽出処理のバックエンド移行とキャッシュ機能の実装**
-  - ファイルのテキスト抽出処理をバックエンドに移行し、高速化と安定性を向上
-  - キャッシュ機能を実装し、同一ファイルへのテキスト抽出処理を効率化
-
-- **フロントエンドでのファイル複数選択機能の実装**
-  - ドキュメント管理画面でファイルを複数選択し、一括でテキスト抽出やタスク抽出を実行可能
-
-- **その他**
-  - 提案資料の自動生成（PPTX）機能
-  - Research AI画面で複数LLMの結果を並列に取得
-  - Planner連携でタスクやプロジェクト管理を効率化
+- **その他**  
+  - 提案資料の自動生成（PPTX）機能  
+  - Research AI画面で複数LLMの結果を並列に取得  
+  - Planner連携でタスクやプロジェクト管理を効率化  
   - Microsoft SSOの認証フローでセキュリティ強化
 
 ---
 
 ## 今後の展望
 
-- より高度なユーザー認証・アクセス制御の導入
-- LLMプロンプトの強化（提案精度・タスク抽出精度の向上）
-- 提案資料やワークフローをPDF・他形式でもエクスポート可能に
-- Planner APIフル機能の統合とMicrosoft SSOとの連動強化
-- タスク管理機能の拡充（タスク間の依存関係やガントチャート表示など）
-- プロジェクト情報のパッシブ更新機能
-- プロンプト確認画面（クエリ送信ボタンと二重確認）の追加
+- より高度なユーザー認証・アクセス制御の導入  
+- LLMプロンプトの強化（提案精度・タスク抽出精度の向上）  
+- 提案資料やワークフローをPDF・他形式でもエクスポート可能に  
+- Planner APIフル機能の統合とMicrosoft SSOとの連動強化  
+- タスク管理機能の拡充（タスク間の依存関係やガントチャート表示など）  
+- プロジェクト情報のパッシブ更新機能  
+- プロンプト確認画面（クエリ送信ボタンと二重確認）の追加  
 - タスク登録時の自動処理とアクションレコメンド機能
 
 ---
 
 ## ライセンス
 
-このプロジェクトは [MIT License](LICENSE) に基づきライセンスされています。
+このプロジェクトは [MIT License](LICENSE) に基づきライセンスされています。  
 
-また、以下のサードパーティソフトウェアを使用しています。
-- [cameltech/japanese-gpt-1b-PII-masking](https://huggingface.co/cameltech/japanese-gpt-1b-PII-masking) (MIT License)
-- [BPMN.io](https://bpmn.io/) by Camunda Services GmbH (MIT License)
+また、以下のサードパーティソフトウェアを使用しています。  
+- [cameltech/japanese-gpt-1b-PII-masking](https://huggingface.co/cameltech/japanese-gpt-1b-PII-masking) (MIT License)  
+- [BPMN.io](https://bpmn.io/) by Camunda Services GmbH (MIT License)  
   - 生成されたBPMNダイアグラムに `bpmn.io` のウォーターマークが表示されます。
 
 ---

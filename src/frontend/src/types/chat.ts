@@ -17,6 +17,8 @@ export interface MessageItem {
 
 // chatRequest の型定義
 export interface ChatRequest {
+  session_id: number;
+  project_id: number;
   message: string;
   model: string;
   source_type: string;
@@ -24,5 +26,4 @@ export interface ChatRequest {
   source_content: string | null;
   source_name: string | string[] | null;
   source_path: string | null;
-  chat_history: MessageItem[];
 }

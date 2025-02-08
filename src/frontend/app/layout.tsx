@@ -10,6 +10,7 @@ import { useModelStore } from './store/modelStore';
 import useProjectStore from './store/projectStore';
 import { Inter } from 'next/font/google';
 import './globals.css';
+import { usePathname } from 'next/navigation'
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -25,6 +26,8 @@ export default function RootLayout({
 }) {
   const { maskingEnabled, setMaskingEnabled, selectedProject } = useProjectStore();
   const { selectedModel, setSelectedModel } = useModelStore();
+  const pathname = usePathname(); // 現在のパス名を取得
+  const isProjectManagementPage = pathname === '/project-management'; // パス名が /project-management かどうか
 
   const modelOptions: ModelOption[] = [
     { value: 'Azure-gpt-4o-mini', label: 'Azure_GPT-4o-mini' },
@@ -76,7 +79,7 @@ export default function RootLayout({
                 </div> */}
               </div>
             </header>
-            <main className="flex-1 overflow-y-auto p-6">
+            <main className={`flex-1 overflow-y-auto p-6 ${isProjectManagementPage ? 'h-full' : ''}`}> {/* isProjectManagementPage が true の場合のみ h-full を適用 */}
               {children}
             </main>
           </div>

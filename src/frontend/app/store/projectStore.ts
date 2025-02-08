@@ -26,6 +26,7 @@ interface Task {
   title: string;
   tag: '新規作成' | '更新' | 'クローズ' | '無視';
   assignee: string;
+  start_date: string;
   due_date: string;
   detail: string;
 }

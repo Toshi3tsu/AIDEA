@@ -17,7 +17,7 @@ export default function ProjectSelector() {
   }
 
   const archivedProjects = projects.filter(project => {
-    if (pathname === '/generate/sales-material' || pathname === '/project-management') {
+    if (pathname === '/generate/sales-material') {// || pathname === '/project-management') {
       return !project.is_archived && project.category === 'プロジェクト'; // コンサルティングAI または プロジェクトAI ページ
     } else {
       return !project.is_archived; // その他のページ
@@ -26,7 +26,7 @@ export default function ProjectSelector() {
 
   useEffect(() => {
     if (
-      (pathname === '/generate' || pathname === '/project-management') &&
+      (pathname === '/generate/sales-material') && // || pathname === '/project-management') &&
       selectedProject &&
       selectedProject.category === 'ナレッジベース'
     ) {
@@ -40,7 +40,7 @@ export default function ProjectSelector() {
       <button
         onClick={() => setProjectMode(!projectMode)}
         className={`p-2 rounded-full hover:bg-gray-100 ${projectMode ? 'bg-[#CB6CE6]' : ''}`}
-        title="プロジェクトモード"
+        title="プロジェクトモード（選択中のプロジェクトとタスクの情報が与えられるようになります。）"
       >
         <Power size={20} color={projectMode ? 'white' : 'black'} />
       </button>

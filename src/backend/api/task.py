@@ -37,6 +37,7 @@ class ExtractionRequest(BaseModel):
 class TaskItem(BaseModel):
     title: str
     assignee: str
+    start_date: str
     due_date: str
     detail: str
     tag: str  # 新規作成、更新、クローズ、無視など
