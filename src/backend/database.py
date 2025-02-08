@@ -75,6 +75,19 @@ class ChatHistory(Base):
     source_path = Column(String, nullable=True)
     source_ids = Column(JSONB, nullable=True)
 
+class ProjectTask(Base):
+    __tablename__ = "project_tasks"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, index=True)
+    user_id = Column(String)
+    title = Column(String, index=True)
+    assignee = Column(String, index=True)
+    start_date = Column(DateTime, index=True)
+    due_date = Column(DateTime, index=True)
+    detail = Column(String)
+    tag = Column(String)
+
 class NewsKeyword(Base):
     __tablename__ = "news_keywords"
 

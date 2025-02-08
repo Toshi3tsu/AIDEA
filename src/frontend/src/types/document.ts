@@ -26,10 +26,11 @@ export interface SelectionOption {
 
 export interface Task {
   title: string;
-  tag: '新規作成' | '更新' | 'クローズ' | '無視';
-  assignee: string;  // 担当者名
-  due_date: string;  // 期限
-  detail: string;    // 詳細
+  assignee: string;
+  start_date: string;
+  due_date: string;
+  detail: string;
+  tag: '新規作成' | '更新' | 'クローズ' | '無視' | '';
 }
 
 export interface ThreadsByTag {

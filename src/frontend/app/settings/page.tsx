@@ -309,7 +309,6 @@ export default function SettingsPage() {
     };
     fetchSolutions();
     fetchProjects();
-    fetchAllProjectFiles();
     fetchSlackChannels();
     fetchConnectedSlackChannels();
   }, []);
@@ -342,26 +341,6 @@ export default function SettingsPage() {
       fetchFolderInfo(project);
     });
   }, [projects]);
-
-  const fetchAllProjectFiles = async () => {
-    try {
-      const response = await axios.get<UploadedFile[]>('http://127.0.0.1:8000/api/files/files');
-      // Group files by project_id
-      const groupedFiles: { [key: number]: UploadedFile[] } = {};
-      response.data.forEach((file) => {
-        if (!groupedFiles[file.project_id]) {
-          groupedFiles[file.project_id] = [];
-        }
-        groupedFiles[file.project_id].push(file);
-      });
-      Object.entries(groupedFiles).forEach(([projectId, files]) => {
-        setProjectFiles(Number(projectId), files);
-      });
-    } catch (error) {
-      console.error('Error fetching project files:', error);
-      alert('プロジェクトファイルの取得に失敗しました。');
-    }
-  };
 
   const fetchSlackChannels = async () => {
     try {
@@ -688,7 +667,6 @@ export default function SettingsPage() {
                   <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">タグ</th>
                   <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Planner</th>
                   <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Box Folder</th>
-                  <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">ファイル</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
@@ -811,74 +789,6 @@ export default function SettingsPage() {
                             フォルダ連携
                           </button>
                         )}
-                      </td>
-                      {/* ファイル一覧 */}
-                      <td className="px-4 py-3 text-center">
-                        <details className="group relative">
-                          <summary className="cursor-pointer text-gray-600 hover:text-gray-800">
-                            {files.length > 0 ? `${files.length} ファイル` : 'ファイルなし'}
-                          </summary>
-                          <div className="absolute left-0 mt-2 w-64 bg-white border border-gray-200 rounded shadow-lg z-10">
-                            {files.length > 0 && (
-                              <ul className="max-h-40 overflow-y-auto">
-                                {files.map((file) => (
-                                  <li key={file.filename} className="flex justify-between items-center px-4 py-2 hover:bg-gray-100">
-                                    <span className="text-sm">{file.filename}</span>
-                                    <div className="flex space-x-1">
-                                      <button
-                                        onClick={() => handleDownloadFile(project.id, file.filename)}
-                                        className="text-[#173241] hover:text-green-700"
-                                        title="ダウンロード"
-                                      >
-                                        <Download className="h-4 w-4" />
-                                      </button>
-                                      <button
-                                        onClick={() => handleDeleteFile(project.id, file.filename)}
-                                        className="text-red-500 hover:text-red-700"
-                                        title="削除"
-                                      >
-                                        <Trash2 className="h-4 w-4" />
-                                      </button>
-                                    </div>
-                                  </li>
-                                ))}
-                              </ul>
-                            )}
-                            {/* ファイルアップロードフォームをここに配置 */}
-                            <form
-                              onSubmit={(e) => {
-                                e.preventDefault();
-                                const target = e.target as typeof e.target & {
-                                  file: { files: FileList };
-                                };
-                                const file = target.file.files[0];
-                                if (file) {
-                                  handleFileUpload(project.id, file);
-                                }
-                              }}
-                              className="px-4 py-2 border-t border-gray-200"
-                            >
-                              <div className="flex items-center space-x-2">
-                                <label
-                                  htmlFor={`file-input-${project.id}`}
-                                  className="cursor-pointer bg-gray-200 text-gray-700 px-2 py-1 rounded hover:bg-gray-300 text-xs"
-                                >
-                                  ファイル追加
-                                </label>
-                                <input
-                                  type="file"
-                                  name="file"
-                                  id={`file-input-${project.id}`}
-                                  className="hidden"
-                                  accept=".txt,.docx"
-                                />
-                                {uploadProgress[project.id] > 0 && (
-                                  <span className="text-xs text-gray-600">{uploadProgress[project.id]}%</span>
-                                )}
-                              </div>
-                            </form>
-                          </div>
-                        </details>
                       </td>
                     </tr>
                   );

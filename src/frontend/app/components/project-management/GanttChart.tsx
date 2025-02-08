@@ -24,7 +24,8 @@ const GanttChartDhtmlx: React.FC<GanttChartDhtmlxProps> = ({ currentTasks }) => 
       data: currentTasks.map((task, index) => ({
         id: index + 1, // DHTMLX Gantt の id は数値である必要あり
         text: task.title,
-        start_date: task.due_date, // 開始日を期限日に設定 (必要に応じて調整)
+        start_date: new Date(task.start_date), // Dateオブジェクトに変換
+        end_date: new Date(task.due_date), // Dateオブジェクトに変換
         duration: 1, // デフォルトのタスク期間 (日単位、必要に応じて調整)
         progress: 0, // 進捗率 (0-1)
       })),

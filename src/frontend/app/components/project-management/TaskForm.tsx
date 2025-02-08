@@ -3,6 +3,8 @@
 
 import React, { useState } from 'react';
 import { Task } from '../../project-management/page';
+import useProjectStore from '../../store/projectStore';
+import axios from 'axios';
 
 interface TaskFormProps {
   onTaskAdd: (newTask: Task) => void;
@@ -11,31 +13,60 @@ interface TaskFormProps {
 const TaskForm: React.FC<TaskFormProps> = ({ onTaskAdd }) => {
   const [title, setTitle] = useState('');
   const [assignee, setAssignee] = useState('');
+  const [startDate, setStartDate] = useState(''); // 開始日を追加
   const [dueDate, setDueDate] = useState('');
   const [detail, setDetail] = useState('');
+  const { selectedProject } = useProjectStore();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title || !assignee || !dueDate || !detail) {
+    if (!title || !assignee || !startDate || !dueDate || !detail) {
       alert('すべての項目を入力してください。');
       return;
     }
-
-    const newTask: Task = {
-      title,
-      assignee,
-      start_date: new Date().toISOString().split('T')[0],
-      due_date: dueDate,
-      detail,
-      tag: '', // 新規登録時はタグを空にする
-    };
-    onTaskAdd(newTask);
-    // フォームをリセット
-    setTitle('');
-    setAssignee('');
-    setDueDate('');
-    setDetail('');
-    alert('タスクを登録しました。');
+  
+    if (!selectedProject) {
+      alert('プロジェクトを選択してください。');
+      return;
+    }
+  
+    try {
+      const response = await axios.post('http://127.0.0.1:8000/api/project_tasks/', {
+        project_id: selectedProject.id,
+        user_id: 'user_888',
+        title,
+        assignee,
+        start_date: startDate,
+        due_date: dueDate,
+        detail,
+        tag: '',
+      });
+  
+      if (response.status === 200) {
+        const newTask: Task = {
+          title,
+          assignee,
+          start_date: startDate,
+          due_date: dueDate,
+          detail,
+          tag: '', // 必要に応じて適切なタグを設定
+        };
+        onTaskAdd(newTask); // 新しいタスクをonTaskAddに渡す
+  
+        // フォームをリセット
+        setTitle('');
+        setAssignee('');
+        setStartDate('');
+        setDueDate('');
+        setDetail('');
+        alert('タスクを登録しました。');
+      } else {
+        alert('タスク登録に失敗しました。');
+      }
+    } catch (error) {
+      console.error('タスク登録エラー:', error);
+      alert('タスク登録中にエラーが発生しました。');
+    }
   };
 
   return (
@@ -65,6 +96,19 @@ const TaskForm: React.FC<TaskFormProps> = ({ onTaskAdd }) => {
             className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
             value={assignee}
             onChange={(e) => setAssignee(e.target.value)}
+            required
+          />
+        </div>
+        <div>
+          <label htmlFor="startDate" className="block text-sm font-medium text-gray-700">
+            開始日
+          </label>
+          <input
+            type="date"
+            id="startDate"
+            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
             required
           />
         </div>

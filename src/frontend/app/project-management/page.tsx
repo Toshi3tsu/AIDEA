@@ -2,22 +2,14 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
+import axios from 'axios';
 import useProjectStore from '../store/projectStore';
 import { ChartBar } from 'lucide-react';
 import ReactDOM from 'react-dom/client';
 import TaskList from '../components/project-management/TaskList';
 import TaskForm from '../components/project-management/TaskForm';
 import GanttChart from '../components/project-management/GanttChart';
-
-// Task型をexportする
-export interface Task {
-  title: string;
-  assignee: string;
-  start_date: string;
-  due_date: string;
-  detail: string;
-  tag: '新規作成' | '更新' | 'クローズ' | '無視' | '';
-}
+import { Task } from '../../src/types/document';
 
 export default function ProjectManagement() {
   useEffect(() => {
@@ -29,12 +21,30 @@ export default function ProjectManagement() {
     root.render(<ChartBar className="h-5 w-5" />);
     iconContainer.appendChild(icon);
   }, []);
-  const { extractedTasks } = useProjectStore();
+  const { selectedProject, setExtractedTasks, extractedTasks } = useProjectStore(); // extractedTasksを取得
+  const [currentTasks, setCurrentTasks] = useState<Task[]>([]);
 
-  const [currentTasks, setCurrentTasks] = useState<Task[]>([
-    { title: '既存タスクA', assignee: '山田', start_date: '2025-02-08', due_date: '2025-02-11', detail: '詳細A', tag: '' },
-    { title: '既存タスクB', assignee: '鈴木', start_date: '2025-02-08', due_date: '2025-02-15', detail: '詳細B', tag: '' },
-  ]);
+  // APIからタスクを取得
+  useEffect(() => {
+    const fetchTasks = async () => {
+      if (!selectedProject) return;
+
+      try {
+        const response = await axios.get(`http://127.0.0.1:8000/api/project_tasks?project_id=${selectedProject.id}`); // APIエンドポイントにリクエスト
+
+        const tasks = response.data || [];
+
+        setExtractedTasks(tasks); // データをzustandに保存
+        setCurrentTasks(tasks);
+      } catch (error) {
+        console.error('タスクの取得に失敗しました:', error);
+        setExtractedTasks([]);
+        setCurrentTasks([]);
+      }
+    };
+
+    fetchTasks();
+  }, [selectedProject, setExtractedTasks]);
 
   const handleAddTask = (newTask: Task) => {
     setCurrentTasks([...currentTasks, newTask]);

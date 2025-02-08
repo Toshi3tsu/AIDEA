@@ -8,6 +8,7 @@ from typing import List
 import logging
 import httpx
 import json
+import datetime
 
 load_dotenv()
 
@@ -116,6 +117,7 @@ async def extract_tasks(request: ExtractionRequest):
                 TaskItem(
                     title=task["title"],
                     assignee=task["assignee"],
+                    start_date=datetime.now().strftime("%Y-%m-%d"),
                     due_date=task["due_date"],
                     detail=task.get("detail", ""),
                     tag=task["tag"],
