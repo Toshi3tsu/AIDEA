@@ -497,53 +497,57 @@ async def disconnect_box_folder(project_id: int):
 @router.post("/list-local-files", response_model=List[UploadedFileResponse])
 async def list_local_files(req: LocalFileRequest, db: Session = Depends(get_db)):
     folder_path = req.folder_path
-    project_id = req.project_id  # project_idをリクエストから受け取る
+    project_id = req.project_id
     if not os.path.isdir(folder_path):
         raise HTTPException(status_code=400, detail="指定されたパスはフォルダではありません。")
 
     files = glob.glob(os.path.join(folder_path, "*"))
     uploaded_files = []
+    db_changed = False # データベースに変更があったかどうかを追跡するフラグ
 
     for file_path in files:
         if os.path.isfile(file_path):
             filename = os.path.basename(file_path)
-            source_name = filename  # source_nameはファイル名と仮定
-            source_path = file_path  # source_pathはフルパスを使用
-            file_last_modified = datetime.fromtimestamp(os.path.getmtime(file_path)) # ファイルの最終更新日時を取得
+            source_name = filename
+            source_path = file_path
+            file_last_modified = datetime.fromtimestamp(os.path.getmtime(file_path))
 
-            # 同じsource_name, source_path, project_idのデータがすでに存在するか確認
+            # 同じsource_name と project_id でファイルを探す (source_path はユニークキーに含まれない)
             existing_file = db.query(UploadedFile).filter(
                 UploadedFile.source_name == source_name,
-                UploadedFile.source_path == source_path,
                 UploadedFile.project_id == project_id
             ).first()
 
             if existing_file:
                 # 既存のレコードがあれば、ファイルの最終更新日時を比較
-                if existing_file.creation_date < file_last_modified: # データベースのcreation_dateよりファイル最終更新日時が新しい = ファイルが更新された
+                if existing_file.creation_date < file_last_modified:
                     existing_file.processed = False
                     existing_file.processed_text = None
+                    db_changed = True # 更新があったのでフラグを立てる
                 else:
-                    pass
+                    pass # 更新不要
             else:
-                # 新規レコードの場合
+                # 新規レコードの場合のみ挿入
                 new_file = UploadedFile(
                     source_name=source_name,
                     source_path=source_path,
                     project_id=project_id,
-                    creation_date=file_last_modified, # 初回登録時のみ最終更新日時を設定
-                    processed=False, # 初回は未処理とする
+                    creation_date=file_last_modified,
+                    processed=False,
                     processed_text=None
                 )
                 db.add(new_file)
                 existing_file = new_file # 新規ファイルもuploaded_filesに追加するためにexisting_fileに代入
+                db_changed = True # 挿入があったのでフラグを立てる
 
-            # データベースに変更をコミット (existing_file が None でない場合のみコミット)
-            if existing_file: # 新規登録または既存ファイル更新の場合のみコミット
-                db.commit()
-                db.refresh(existing_file) # refresh してidなどを取得
+            if existing_file:
                 uploaded_files.append(existing_file)
 
+    # データベースに変更があった場合のみコミット
+    if db_changed:
+        db.commit()
+        for file in uploaded_files: # refresh は commit 後に行う
+            db.refresh(file)
 
     return uploaded_files
 

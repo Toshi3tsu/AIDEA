@@ -2,7 +2,8 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Task } from '../../project-management/page';
+import { Task } from '../../../src/types/document';
+import axios from 'axios';
 
 interface TaskListProps {
   extractedTasks: Task[];
@@ -11,6 +12,7 @@ interface TaskListProps {
 }
 
 const TaskList: React.FC<TaskListProps> = ({ extractedTasks, currentTasks, setCurrentTasks }) => {
+  console.log('TaskList extractedTasks:', extractedTasks);
   const [linkedPairs, setLinkedPairs] = useState<{ extractedIndex: number; currentIndex: number }[]>([]);
 
   // ドットの参照用 ref

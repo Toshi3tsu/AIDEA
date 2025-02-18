@@ -8,7 +8,7 @@ import { Trash2 } from 'lucide-react';
 
 interface Task {
   title: string;
-  tag: '新規作成' | '更新' | 'クローズ';
+  tag: '' | '新規作成' | '更新' | 'クローズ' | '無視';
   assignee: string;
   start_date: string; // YYYY-MM-DD形式を想定
   due_date: string; // YYYY-MM-DD形式を想定
@@ -63,7 +63,7 @@ const TaskExtractionModal: React.FC<TaskExtractionModalProps> = ({
   // タスク登録（タスクの紐づけ）時の処理
   const handleTaskLink = () => {
     setExtractedTasks(tasks);
-    router.push('/components/project-management/TaskList');
+    router.push('/project-management');
   };
 
   return (

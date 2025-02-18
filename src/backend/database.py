@@ -1,4 +1,4 @@
-# srr/backend/database.py
+# src/backend/database.py
 from sqlalchemy import create_engine, Column, Integer, String, Text, Boolean, DateTime, ForeignKey, BigInteger
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
@@ -45,7 +45,7 @@ class Project(Base):
 class UploadedFile(Base):
     __tablename__ = "uploaded_files"
     id = Column(Integer, primary_key=True, index=True)
-    source_name = Column(JSONB, nullable=True)
+    source_name = Column(String, nullable=True)
     source_path = Column(String)
     project_id = Column(Integer, index=True)
     creation_date = Column(DateTime, nullable=True)
@@ -71,7 +71,7 @@ class ChatHistory(Base):
     timestamp = Column(DateTime)
     sender = Column(String)
     message = Column(String)
-    source_name = Column(JSONB, nullable=True)
+    source_name = Column(String, nullable=True)
     source_path = Column(String, nullable=True)
     source_ids = Column(JSONB, nullable=True)
 

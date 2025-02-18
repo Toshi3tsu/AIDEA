@@ -1,7 +1,7 @@
 # src/backend/api/task.py
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from openai import OpenAI
+from openai import OpenAI, AzureOpenAI
 import os
 from dotenv import load_dotenv
 from typing import List
@@ -15,25 +15,44 @@ load_dotenv()
 # ログの設定
 logging.basicConfig(level=logging.DEBUG)
 
-# カスタム証明書のパス（自己署名証明書を指定）
-CUSTOM_CERT_PATH = "C:\\Users\\toshimitsu_fujiki\\OpenAI_Cato_Networks_CA.crt"
+# モデルごとの設定
+MODEL_CONFIG = {
+    "Azure-gpt-4o-mini": {
+        "azure_endpoint": os.getenv("AZURE_OPENAI_ENDPOINT"),
+        "api_key": os.getenv("AZURE_OPENAI_API_KEY"),
+        "api_version": "2024-08-01-preview",
+        "cert_path": os.getenv("AZURE_CERT_PATH"),
+        "api_model_name": "gpt-4o-mini"  # Azure OpenAIのデプロイ名に合わせる必要があるかもしれません
+    }
+}
 
-# httpxクライアントを構築
-httpx_client = httpx.Client(
-    verify=CUSTOM_CERT_PATH  # 自己署名証明書を指定
-)
+def get_client(model: str):
+    if model not in MODEL_CONFIG:
+        raise ValueError(f"指定されたモデル '{model}' は無効です。")
+    model_config = MODEL_CONFIG[model]
+    api_key = model_config.get("api_key")
+    if not api_key:
+        raise ValueError(f"{model} の APIキーが設定されていません。")
 
-# OpenAIクライアントにカスタムhttpxクライアントを渡す
-api_key = os.getenv("OPENAI_API_KEY")
-if not api_key:
-    raise ValueError("APIキーが設定されていません。")
+    if model == "Azure-gpt-4o-mini":
+        azure_endpoint = model_config.get("azure_endpoint")
+        api_version = model_config.get("api_version")
+        if not azure_endpoint or not api_version:
+            raise ValueError(f"{model} の設定が不十分です。")
 
-client = OpenAI(api_key=api_key, http_client=httpx_client)
+        return AzureOpenAI(
+            azure_endpoint=azure_endpoint, 
+            api_key=api_key, 
+            api_version=api_version
+        )
+    else:
+        raise ValueError(f"モデル '{model}' はAzure OpenAIモデルではありません。")
 
 router = APIRouter()
 
 class ExtractionRequest(BaseModel):
     document_text: str
+    model: str = "Azure-gpt-4o-mini"
 
 class TaskItem(BaseModel):
     title: str
@@ -47,16 +66,18 @@ class ExtractionResponse(BaseModel):
     tasks: List[TaskItem]
 
 @router.post("/extract-tasks", response_model=ExtractionResponse)
-async def extract_tasks(request: ExtractionRequest):
+async def extract_tasks(task_extraction_request: ExtractionRequest):
+    client = get_client(task_extraction_request.model)
+    api_model_name = MODEL_CONFIG[task_extraction_request.model]["api_model_name"]
     """
     OpenAI APIを使用して議事録からタスクを抽出します。
     """
     try:
         logging.info("タスク抽出を開始します...")
-        logging.debug(f"議事録の内容: {request.document_text}")
+        logging.debug(f"議事録の内容: {task_extraction_request.document_text}")
 
         response = client.chat.completions.create(
-            model="gpt-4o-mini",  # Function Calling対応モデル
+            model=api_model_name,
             messages=[
                 {
                     "role": "system",
@@ -64,7 +85,7 @@ async def extract_tasks(request: ExtractionRequest):
                 },
                 {
                     "role": "user",
-                    "content": f"議事録の内容:\n{request.document_text}",
+                    "content": f"議事録の内容:\n{task_extraction_request.document_text}",
                 },
             ],
             functions=[
@@ -98,6 +119,7 @@ async def extract_tasks(request: ExtractionRequest):
                 }
             ],
             function_call={"name": "extract_tasks"},
+            max_tokens=16384,
             temperature=0.1,
         )
 
@@ -117,7 +139,7 @@ async def extract_tasks(request: ExtractionRequest):
                 TaskItem(
                     title=task["title"],
                     assignee=task["assignee"],
-                    start_date=datetime.now().strftime("%Y-%m-%d"),
+                    start_date=datetime.datetime.now().strftime("%Y-%m-%d"),
                     due_date=task["due_date"],
                     detail=task.get("detail", ""),
                     tag=task["tag"],

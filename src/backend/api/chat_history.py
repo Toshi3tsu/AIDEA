@@ -16,7 +16,7 @@ class MessageItem(BaseModel):
     sender: str
     message: str
     timestamp: datetime
-    source_name: Optional[Union[str, List[str]]] = None
+    source_name: Optional[List[str]] = None
     source_path: Optional[str] = None
     source_ids: Optional[List[str]] = None
 
@@ -61,7 +61,7 @@ def _write_messages_to_db(request: SaveChatRequest):
                 timestamp=msg.timestamp,
                 sender=msg.sender,
                 message=msg.message,
-                source_name=msg.source_name,
+                source_name=msg.source_name if msg.source_name is not None else None, # Ensure None is passed if it's None
                 source_path=msg.source_path,
                 source_ids=msg.source_ids
             )
@@ -75,18 +75,39 @@ def _write_messages_to_db(request: SaveChatRequest):
 @router.get("/history/{project_id}/{session_id}", response_model=List[MessageItem])
 async def get_chat_history(project_id: int, session_id: int, db: Session = Depends(get_db)):
     try:
+        # タイムスタンプ順（昇順）にチャット履歴を取得
         db_records = db.query(ChatHistory).filter(
             ChatHistory.project_id == project_id,
             ChatHistory.session_id == session_id
-        ).all()
-        return [MessageItem(
-            sender=record.sender,
-            message=record.message,
-            timestamp=record.timestamp,
-            source_name=record.source_name,
-            source_path=record.source_path,
-            source_ids=record.source_ids
-        ) for record in db_records]
+        ).order_by(ChatHistory.timestamp.asc()).all()
+        
+        messages = []
+        # 累積用の set を用意（重複を防ぐ）
+        accumulated_source_ids = set()
+        
+        for record in db_records:
+            # 各レコードの source_ids（もしあれば）を累積する
+            current_source_ids = record.source_ids if record.source_ids else []
+            if current_source_ids:
+                accumulated_source_ids.update(current_source_ids)
+            
+            # 各メッセージをそのまま MessageItem として作成
+            messages.append(MessageItem(
+                sender=record.sender,
+                message=record.message,
+                timestamp=record.timestamp,
+                source_name=[record.source_name] if record.source_name else None,
+                source_path=record.source_path,
+                # ここでは個別の source_ids を一旦そのまま設定
+                source_ids=record.source_ids
+            ))
+        
+        # 最新の（＝最後の）メッセージが AI の応答なら、
+        # これまでの累積 source_ids を上書きして返す（＝累積状態とする）
+        if messages and messages[-1].sender == 'ai':
+            messages[-1].source_ids = list(accumulated_source_ids)
+        
+        return messages
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

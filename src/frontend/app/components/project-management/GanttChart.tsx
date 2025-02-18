@@ -2,7 +2,7 @@
 'use client';
 
 import React, { useEffect, useRef } from 'react';
-import { Task } from '../../project-management/page';
+import { Task } from '../../../src/types/document';
 import 'dhtmlx-gantt'; // dhtmlx-gantt の本体をインポート
 import 'dhtmlx-gantt/codebase/dhtmlxgantt.css'; // CSS は念のためこちらもインポート (不要な場合は削除可)
 

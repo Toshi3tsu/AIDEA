@@ -24,6 +24,13 @@ MODEL_CONFIG = {
         "api_key": os.getenv("PERPLEXITY_API_KEY"),
         "cert_path": "C:\\Users\\toshimitsu_fujiki\\Perplexity_Cato_Networks_CA.crt",
         "base_url": "https://api.perplexity.ai"
+    },
+    "Azure-gpt-4o-mini": {
+        "azure_endpoint": os.getenv("AZURE_OPENAI_ENDPOINT"),
+        "api_key": os.getenv("AZURE_OPENAI_API_KEY"),
+        "api_version": "2024-08-01-preview",
+        "cert_path": "C:\\Users\\toshimitsu_fujiki\\Azure_Cato_Networks_CA.crt",
+        "api_model_name": "gpt-4o-mini"
     }
 }
 

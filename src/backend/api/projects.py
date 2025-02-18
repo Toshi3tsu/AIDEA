@@ -233,16 +233,18 @@ async def update_flow(project_id: int = Path(..., gt=0), flow: FlowUpdate = None
     return ProjectOut(**updated_project)
 
 @router.put("/{project_id}/requirements", response_model=ProjectOut)
-async def update_requirements(project_id: int = Path(..., gt=0), req_update: RequirementsUpdate = None):
-    df = read_projects()
-    if project_id not in df['id'].values:
+async def update_requirements(project_id: int = Path(..., gt=0), req_update: RequirementsUpdate = None, db: Session = Depends(get_db)):
+    db_project = db.query(Project).filter(Project.id == project_id).first()
+    if not db_project:
         raise HTTPException(status_code=404, detail="Project not found")
-    index = df.index[df['id'] == project_id].tolist()[0]
+
     if req_update and req_update.solution_requirements is not None:
-        df.at[index, 'solution_requirements'] = req_update.solution_requirements
-    write_projects(df)
-    updated_project = df.loc[index].to_dict()
-    return ProjectOut(**updated_project)
+        db_project.solution_requirements = req_update.solution_requirements
+
+    db.commit()
+    db.refresh(db_project)
+    replace_none_with_empty(db_project) # 必要に応じて None を空文字に置換
+    return db_project
 
 def parse_bpmn_xml_content(xml_content):
     """BPMN XMLコンテンツを解析し、形状とコネクタのデータを抽出する。"""

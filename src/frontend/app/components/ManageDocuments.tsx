@@ -238,10 +238,12 @@ export default function ManageDocuments({ selectedProject }: ManageDocumentsProp
     try {
       const extractionResponse = await axios.post('http://127.0.0.1:8000/api/task/extract-tasks', {
         document_text: docText,
+        model: "Azure-gpt-4o-mini"
       });
       setExtractedTasks(extractionResponse.data.tasks);
     } catch (error) {
       console.error('Error extracting tasks:', error);
+        alert('タスク抽出中にエラーが発生しました。詳細はコンソールを確認してください。');
     }
 
     setShowTaskModal(true);
@@ -252,20 +254,15 @@ export default function ManageDocuments({ selectedProject }: ManageDocumentsProp
     setShowTaskModal(false);
   };
 
-  const handleTaskLink = (tasks: Task[]) => {
-    router.push('/project-management');
-  };
-
   return (
     <div className="h-full flex flex-col">
       {/* 上部固定エリア：ソース選択＆内容確認 */}
-      <div className="flex-shrink-0 p-4">
+      <div className="flex-shrink-0 p-2">
         {showTaskModal && (
           <TaskExtractionModal
             documentText={documentText}
             extractedTasks={extractedTasks}
             onCancel={handleModalCancel}
-            onTaskLink={handleTaskLink}
           />
         )}
 
@@ -357,7 +354,7 @@ export default function ManageDocuments({ selectedProject }: ManageDocumentsProp
       </div>
 
       {/* 下部スクロール可能エリア：タグごとのスレッド一覧とアップロードされたファイル一覧 */}
-      <div className="bg-white flex-grow overflow-y-auto px-4 pb-4">
+      <div className="bg-white flex-grow overflow-y-auto px-4">
         {/* タグごとのスレッド一覧 */}
         <div className="mt-6">
           <div className="flex items-center mb-2">

@@ -52,6 +52,12 @@ interface SelectionOption {
   type: 'file' | 'slack';
 }
 
+interface NewsKeyword {
+  id: number;
+  keyword: string;
+  user_id: string;
+}
+
 export default function SettingsPage() {
   useEffect(() => {
     document.querySelector('.page-title')!.textContent = '設定';
@@ -63,18 +69,18 @@ export default function SettingsPage() {
     iconContainer.appendChild(icon);
   }, []);
   const { generatedFlow, setGeneratedFlow } = useFlowStore();
-  const { projects, setProjects, slackChannels, setSlackChannels, 
+  const { projects, setProjects, slackChannels, setSlackChannels,
     connectedSlackChannels, setConnectedSlackChannels, projectFiles, setProjectFiles, } = useProjectStore();
   const [boxFolderInfos, setBoxFolderInfos] = useState<{ [projectId: number]: BoxFolderInfo | null }>({});
   const [uploadProgress, setUploadProgress] = useState<{ [key: number]: number }>({});
   const [searchTerm, setSearchTerm] = useState('');
   const [editingSolution, setEditingSolution] = useState(null);
-  const [activeTab, setActiveTab] = useState<'fileApi' | 'solution' | 'masking' | 'projectList' | 'newsKeywords'>('fileApi');
+  const [activeTab, setActiveTab] = useState<'fileApi' | 'solution' | 'masking' | 'projectList' | 'newsKeywords' | 'baseDirectory'>('fileApi');
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [isMsalInitialized, setIsMsalInitialized] = useState(false);
   const [groupLinks, setGroupLinks] = useState<{ [projectId: number]: string }>({});
   const [solutions, setSolutions] = useState<any[]>([]);
-  const [newsKeywords, setNewsKeywords] = useState<string[]>([]); // 初期値を空の配列に変更
+  const [newsKeywords, setNewsKeywords] = useState<NewsKeyword[]>([]); // 初期値を空の配列に変更、型を修正
   const [newKeyword, setNewKeyword] = useState('');
   const [isPathModalOpen, setIsPathModalOpen] = useState(false);
   const [relativePath, setRelativePath] = useState('');
@@ -98,16 +104,16 @@ export default function SettingsPage() {
   useEffect(() => {
     const fetchInitialKeywords = async () => {
       try {
-        const response = await axios.get<string[]>('http://127.0.0.1:8000/api/news/keywords');
+        const response = await axios.get<NewsKeyword[]>('http://127.0.0.1:8000/api/news/keywords'); // レスポンスの型を修正
         setNewsKeywords(response.data);
       } catch (error) {
         console.error('Failed to fetch keywords:', error);
-        // APIからの取得に失敗した場合、ローカルストレージから読み込むか、初期値を設定
+        // APIからの取得に失敗した場合、ローカルストレージから読み込むか、初期値を設定 (ローカルストレージはオブジェクト配列に対応するように修正が必要な場合あり)
         const storedKeywords = localStorage.getItem('newsKeywords');
         if (storedKeywords) {
-          setNewsKeywords(JSON.parse(storedKeywords));
+          setNewsKeywords(JSON.parse(storedKeywords)); // JSON.parseも型を考慮
         } else {
-          setNewsKeywords(['DX']); // ローカルストレージにもない場合は初期値を設定
+          setNewsKeywords([{ id: 1, keyword: 'DX', user_id: 'user_888' }]); // 初期値をオブジェクト配列に変更 (id, user_id は仮の値)
         }
       }
     };
@@ -134,10 +140,10 @@ export default function SettingsPage() {
   }, [newsKeywords]);
 
   const handleAddKeyword = async () => {
-    if (newKeyword && !newsKeywords.includes(newKeyword)) {
-      const updatedKeywords = [...newsKeywords, newKeyword];
+    if (newKeyword && !newsKeywords.some(kw => kw.keyword === newKeyword)) { // includes を some に変更
+      const updatedKeywords = [...newsKeywords, { id: Date.now(), keyword: newKeyword, user_id: 'user_888' }]; // id, user_id を追加 (id は仮の値)
       try {
-        await axios.post('http://127.0.0.1:8000/api/news/keywords', updatedKeywords);
+        await axios.post('http://127.0.0.1:8000/api/news/keywords', updatedKeywords.map(kw => kw.keyword)); // キーワードのリストだけを送信するように修正
         setNewsKeywords(updatedKeywords);
         setNewKeyword('');
       } catch (error) {
@@ -146,10 +152,10 @@ export default function SettingsPage() {
     }
   };
 
-  const handleDeleteKeyword = async (keywordToDelete: string) => {
-    const updatedKeywords = newsKeywords.filter(keyword => keyword !== keywordToDelete);
+  const handleDeleteKeyword = async (keywordToDelete: NewsKeyword) => { // 引数の型を修正
+    const updatedKeywords = newsKeywords.filter(keyword => keyword.id !== keywordToDelete.id); // id で比較
     try {
-      await axios.post('http://127.0.0.1:8000/api/news/keywords', updatedKeywords);
+      await axios.post('http://127.0.0.1:8000/api/news/keywords', updatedKeywords.map(kw => kw.keyword)); // キーワードのリストだけを送信するように修正
       setNewsKeywords(updatedKeywords);
     } catch (error) {
       console.error('Failed to delete keyword:', error);
@@ -358,7 +364,6 @@ export default function SettingsPage() {
       setConnectedSlackChannels(response.data);
     } catch (error) {
       console.error('Error fetching connected Slack channels:', error);
-      alert('プロジェクトとSlackチャンネルの連携情報の取得に失敗しました。');
     }
   };
 
@@ -499,7 +504,7 @@ export default function SettingsPage() {
       newKeywords[index - 1] = temp;
       setNewsKeywords(newKeywords);
       try {
-        await axios.post('http://127.0.0.1:8000/api/news/keywords', newKeywords);
+        await axios.post('http://127.0.0.1:8000/api/news/keywords', newKeywords.map(kw => kw.keyword)); // キーワードのリストだけを送信するように修正
       } catch (error) {
         console.error('Failed to update keywords:', error);
       }
@@ -515,7 +520,7 @@ export default function SettingsPage() {
       newKeywords[index + 1] = temp;
       setNewsKeywords(newKeywords);
       try {
-        await axios.post('http://127.0.0.1:8000/api/news/keywords', newKeywords);
+        await axios.post('http://127.0.0.1:8000/api/news/keywords', newKeywords.map(kw => kw.keyword)); // キーワードのリストだけを送信するように修正
       } catch (error) {
         console.error('Failed to update keywords:', error);
       }
@@ -585,13 +590,13 @@ export default function SettingsPage() {
       alert('ベースディレクトリは絶対パスで入力してください。');
       return;
     }
-  
+
     // Windowsパスの場合、先頭に '/' を追加
     let normalizedPath = newBaseDirectoryInput;
     if (process.platform === 'win32' && !newBaseDirectoryInput.startsWith('/')) {
       normalizedPath = '/' + newBaseDirectoryInput;
     }
-  
+
     try {
       await axios.put('http://127.0.0.1:8000/api/box/base-directory', {
         new_base_directory: normalizedPath,
@@ -649,6 +654,12 @@ export default function SettingsPage() {
             onClick={() => setActiveTab('newsKeywords')}
           >
             ニュースキーワード設定
+          </button>
+          <button
+            className={`px-4 py-2 rounded ${activeTab === 'baseDirectory' ? 'bg-[#173241] text-white' : 'bg-gray-200 text-gray-700'}`} // 'baseDirectory' タブを追加
+            onClick={() => setActiveTab('baseDirectory')}
+          >
+            ベースディレクトリ設定
           </button>
         </nav>
       </div>
@@ -930,162 +941,72 @@ export default function SettingsPage() {
       )}
 
       {activeTab === 'newsKeywords' && (
-        <div>
-          <h2 className="text-2xl font-bold text-gray-800 mb-4">ニュースキーワード設定</h2>
-          <div className="mb-4">
-            <label htmlFor="new-keyword" className="block text-gray-700 text-sm font-bold mb-2">
-              キーワードを追加:
-            </label>
-            <div className="flex">
-              <input
-                type="text"
-                id="new-keyword"
-                className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline mr-2"
-                placeholder="新しいキーワードを入力"
-                value={newKeyword}
-                onChange={(e) => setNewKeyword(e.target.value)}
-              />
-              <button
-                className="px-4 py-2 bg-[#173241] text-white font-semibold rounded hover:bg-[#0F2835] focus:outline-none focus:shadow-outline"
-                type="button"
-                onClick={handleAddKeyword}
-              >
-                追加
-              </button>
-            </div>
-          </div>
-
-          {/* キーワードリスト (順番入れ替え機能付き) */}
-          <div>
-            <h3 className="text-xl font-semibold text-gray-800 mb-2">登録済みキーワード</h3>
-            <ul>
-              {newsKeywords.map((keyword, index) => ( // index を map 関数に追加
-                <li key={keyword} className="flex justify-between items-center px-4 py-2 border rounded mb-2">
-                  <div className="flex items-center">
-                    <span className="mr-4">{keyword}</span>
-                    <div className="flex flex-col">
-                      <button
-                        onClick={() => handleMoveKeywordUp(index)}
-                        className="p-1 hover:bg-gray-200 rounded-full focus:outline-none"
-                        disabled={index === 0} // 先頭の場合は disabled
-                      >
-                        <ChevronUp className="h-4 w-4 text-gray-700" />
-                      </button>
-                      <button
-                        onClick={() => handleMoveKeywordDown(index)}
-                        className="p-1 hover:bg-gray-200 rounded-full focus:outline-none"
-                        disabled={index === newsKeywords.length - 1} // 末尾の場合は disabled
-                      >
-                        <ChevronDown className="h-4 w-4 text-gray-700" />
-                      </button>
-                    </div>
+              <div>
+                <h2 className="text-2xl font-bold text-gray-800 mb-4">ニュースキーワード設定</h2>
+                <div className="mb-4">
+                  <label htmlFor="new-keyword" className="block text-gray-700 text-sm font-bold mb-2">
+                    キーワードを追加:
+                  </label>
+                  <div className="flex">
+                    <input
+                      type="text"
+                      id="new-keyword"
+                      className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline mr-2"
+                      placeholder="新しいキーワードを入力"
+                      value={newKeyword}
+                      onChange={(e) => setNewKeyword(e.target.value)}
+                    />
+                    <button
+                      className="px-4 py-2 bg-[#173241] text-white font-semibold rounded hover:bg-[#0F2835] focus:outline-none focus:shadow-outline"
+                      type="button"
+                      onClick={handleAddKeyword}
+                    >
+                      追加
+                    </button>
                   </div>
-                  <button
-                    onClick={() => handleDeleteKeyword(keyword)}
-                    className="px-2 py-1 bg-red-500 text-white rounded hover:bg-red-700"
-                  >
-                    削除
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
+                </div>
+
+                {/* キーワードリスト (順番入れ替え機能付き) */}
+                <div>
+                  <h3 className="text-xl font-semibold text-gray-800 mb-2">登録済みキーワード</h3>
+                  <ul>
+                    {newsKeywords.map((keyword, index) => ( // index を map 関数に追加
+                      <li key={keyword.id} className="flex justify-between items-center px-4 py-2 border rounded mb-2"> {/* key を keyword.id に修正 */}
+                        <div className="flex items-center">
+                          <span className="mr-4">{keyword.keyword}</span> {/* keyword.keyword でキーワード文字列を表示 */}
+                          <div className="flex flex-col">
+                            <button
+                              onClick={() => handleMoveKeywordUp(index)}
+                              className="p-1 hover:bg-gray-200 rounded-full focus:outline-none"
+                              disabled={index === 0} // 先頭の場合は disabled
+                            >
+                              <ChevronUp className="h-4 w-4 text-gray-700" />
+                            </button>
+                            <button
+                              onClick={() => handleMoveKeywordDown(index)}
+                              className="p-1 hover:bg-gray-200 rounded-full focus:outline-none"
+                              disabled={index === newsKeywords.length - 1} // 末尾の場合は disabled
+                            >
+                              <ChevronDown className="h-4 w-4 text-gray-700" />
+                            </button>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => handleDeleteKeyword(keyword)} // keyword オブジェクトを渡すように修正
+                          className="px-2 py-1 bg-red-500 text-white rounded hover:bg-red-700"
+                        >
+                          削除
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            )}
+
+      {activeTab === 'baseDirectory' && (
+        <GlobalBaseDirectory /> // GlobalBaseDirectory コンポーネントをレンダリング
       )}
     </div>
   );
 }
-
-// グローバルベースディレクトリ設定コンポーネント
-const GlobalBaseDirectory = () => {
-  const [isBaseDirModalOpen, setIsBaseDirModalOpen] = useState<boolean>(false);
-  const [newBaseDirectoryInput, setNewBaseDirectoryInput] = useState<string>('');
-  const [baseDirectory, setBaseDirectory] = useState<string>('');
-
-  useEffect(() => {
-    const fetchBaseDirectory = async () => {
-      try {
-        const response = await axios.get<{ box_base_directory: string }>('http://127.0.0.1:8000/api/box/base-directory');
-        setBaseDirectory(response.data.box_base_directory);
-      } catch (error) {
-        console.error('Failed to fetch base directory:', error);
-        setBaseDirectory('');
-      }
-    };
-
-    fetchBaseDirectory();
-  }, []);
-
-  const handleSaveBaseDirectory = async () => {
-    if (!newBaseDirectoryInput.startsWith('/')) {
-      alert('ベースディレクトリは絶対パスで入力してください。');
-      return;
-    }
-    try {
-      await axios.put('http://127.0.0.1:8000/api/box/base-directory', newBaseDirectoryInput);
-      alert('ベースディレクトリが更新されました。');
-      setBaseDirectory(newBaseDirectoryInput);
-      setIsBaseDirModalOpen(false);
-      setNewBaseDirectoryInput('');
-      // プロジェクトのファイル一覧を再取得
-      // fetchProjects関数を使用するため、グローバルステートやコンテキストを活用する必要があります。
-      // ここでは簡略化のため、ページ全体をリロードします。
-      window.location.reload();
-    } catch (error) {
-      console.error('Error setting base directory:', error);
-      alert('ベースディレクトリの設定に失敗しました。');
-    }
-  };
-
-  return (
-    <div className="bg-white p-6 rounded-lg shadow">
-      <h2 className="text-xl font-semibold mb-4">ベースディレクトリ設定</h2>
-      <div className="flex items-center space-x-4">
-        <span className="text-gray-700">現在のベースディレクトリ:</span>
-        <span className="font-mono text-gray-800">{baseDirectory || "未設定"}</span>
-        <button
-          onClick={() => {
-            setNewBaseDirectoryInput(baseDirectory);
-            setIsBaseDirModalOpen(true);
-          }}
-          className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
-        >
-          変更
-        </button>
-      </div>
-
-      {/* ベースディレクトリ変更モーダル */}
-      {isBaseDirModalOpen && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white p-6 rounded-lg shadow-lg w-96">
-            <h2 className="text-xl font-semibold mb-4">ベースディレクトリを変更</h2>
-            <input
-              type="text"
-              value={newBaseDirectoryInput}
-              onChange={(e) => setNewBaseDirectoryInput(e.target.value)}
-              placeholder="/path/to/box/base/directory"
-              className="w-full p-2 border border-gray-300 rounded mb-4"
-            />
-            <div className="flex justify-end space-x-2">
-              <button
-                onClick={() => {
-                  setIsBaseDirModalOpen(false);
-                  setNewBaseDirectoryInput('');
-                }}
-                className="px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400"
-              >
-                キャンセル
-              </button>
-              <button
-                onClick={handleSaveBaseDirectory}
-                className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-              >
-                保存
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};

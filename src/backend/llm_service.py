@@ -1,7 +1,7 @@
 # src/backend/llm_service.py
 import os
 import openai
-from openai import OpenAI
+from openai import OpenAI, AzureOpenAI
 from dotenv import load_dotenv
 import logging
 import json
@@ -21,17 +21,27 @@ MODEL_CONFIG = {
     "gpt-4o-mini": {
         "api_key": os.getenv("OPENAI_API_KEY"),
         "cert_path": "C:\\Users\\toshimitsu_fujiki\\OpenAI_Cato_Networks_CA.crt", # 証明書のパスを修正
-        "base_url": "https://api.openai.com/v1"
+        "base_url": "https://api.openai.com/v1",
+        "api_model_name": "gpt-4o-mini"
     },
     "deepseek-chat-v3": { # モデル名を deepseek-chat-v3 に修正
         "api_key": os.getenv("DEEPSEEK_API_KEY"),
         "cert_path": "C:\\Users\\toshimitsu_fujiki\\DeepSeek_CA.crt", # 証明書のパスを修正
-        "base_url": "https://api.deepseek.com/v1"
+        "base_url": "https://api.deepseek.com/v1",
+        "api_model_name": "deepseek-chat-v3"
     },
     "perplexity": {
         "api_key": os.getenv("PERPLEXITY_API_KEY"),
         "cert_path": "C:\\Users\\toshimitsu_fujiki\\Perplexity_Cato_Networks_CA.crt", # 証明書のパスを修正
-        "base_url": "https://api.perplexity.ai" # Perplexity API の base URL
+        "base_url": "https://api.perplexity.ai", # Perplexity API の base URL
+        "api_model_name": "perplexity"
+    },
+    "Azure-gpt-4o-mini": {
+        "azure_endpoint": os.getenv("AZURE_OPENAI_ENDPOINT"),
+        "api_key": os.getenv("AZURE_OPENAI_API_KEY"),
+        "api_version": os.getenv("AZURE_OPENAI_API_VERSION"), # 環境変数から取得するように修正
+        "cert_path": "C:\\Users\\toshimitsu_fujiki\\Azure_Cato_Networks_CA.crt",
+        "api_model_name": "gpt-4o-mini"
     }
 }
 
@@ -45,7 +55,6 @@ def get_client(model: str):
     model_config = MODEL_CONFIG[model]
     api_key = model_config.get("api_key")
     cert_path = model_config.get("cert_path")
-    base_url = model_config.get("base_url")
 
     if not api_key:
         raise ValueError(f"{model} の APIキーが設定されていません。")
@@ -54,10 +63,16 @@ def get_client(model: str):
 
     httpx_client = httpx.Client(verify=cert_path)
 
-    if model in ["gpt-4o-mini", "deepseek-chat-v3"]: # OpenAI クライアントを使用するモデル
+    if model == "Azure-gpt-4o-mini":
+        azure_endpoint = model_config.get("azure_endpoint")
+        api_key = model_config.get("api_key")
+        api_version = model_config.get("api_version")
+        if not azure_endpoint or not api_version:
+            raise ValueError(f"{model} の設定が不十分です。")
+        return wrap_openai(AzureOpenAI(azure_endpoint=azure_endpoint, api_key=api_key, api_version=api_version))
+    elif model in ["gpt-4o-mini", "deepseek-chat-v3", "perplexity"]: # OpenAI クライアントを使用するモデル
+        base_url = model_config.get("base_url")
         return wrap_openai(OpenAI(api_key=api_key, base_url=base_url, http_client=httpx_client))
-    elif model == "perplexity":
-        return wrap_openai(OpenAI(api_key=api_key, base_url=base_url, http_client=httpx_client)) # OpenAI クライアントを互換性のため使用
 
     raise ValueError(f"モデル '{model}' のクライアント設定がありません。")
 
@@ -68,28 +83,11 @@ async def call_llm(request: str, llm_name: str) -> str:
     logging.info(f"LLM '{llm_name}' を呼び出し中...")
     try:
         client = get_client(llm_name)
+        api_model_name = MODEL_CONFIG[llm_name]["api_model_name"]
 
-        if llm_name == "gpt-4o-mini":
+        if llm_name == "gpt-4o-mini" or llm_name == "deepseek-chat-v3" or llm_name == "perplexity" or llm_name == "Azure-gpt-4o-mini":
             response = client.chat.completions.create(
-                model=llm_name,
-                messages=[{"role": "user", "content": request}],
-                max_tokens=4000,
-                temperature=0.5,
-            )
-            return response.choices[0].message.content.strip()
-
-        elif llm_name == "deepseek-chat-v3":
-            response = client.chat.completions.create(
-                model="deepseek-chat", # DeepSeek Chat API はモデル名を "deepseek-chat" で指定
-                messages=[{"role": "user", "content": request}],
-                max_tokens=4000,
-                temperature=0.5,
-            )
-            return response.choices[0].message.content.strip()
-
-        elif llm_name == "perplexity": # Perplexity API 呼び出し (OpenAI互換APIを使用)
-            response = client.chat.completions.create(
-                model="sonar",
+                model=api_model_name,
                 messages=[{"role": "user", "content": request}],
                 max_tokens=4000,
                 temperature=0.5,
@@ -305,9 +303,9 @@ def analyze_business_flow(business_flow: str, issues: str, model: str = "gpt-4o-
     except Exception as e:
         raise RuntimeError(f"AI APIエラー: {str(e)}")
 
-@traceable
-def generate_requirements(customer_info: str, issues: str, model: str = "gpt-4o-mini") -> list:
+def generate_requirements(customer_info: str, issues: str, model: str = "Azure-gpt-4o-mini") -> list:
     client = get_client(model)
+    api_model_name = MODEL_CONFIG[model]["api_model_name"]
 
     """
     顧客情報と課題に基づいて、ソリューションに必要な機能要件を生成します。
@@ -346,31 +344,36 @@ def generate_requirements(customer_info: str, issues: str, model: str = "gpt-4o-
         }]
 
         response = client.chat.completions.create(
-            model=model,
+            model=api_model_name,
             messages=[
                 {"role": "system", "content": "あなたは優秀な業務・ITコンサルタントです。付加価値労働生産性の向上を目的に、ソリューションの導入を行い、業務を改善します。"},
                 {"role": "user", "content": prompt}
             ],
             tools=tools,
-            max_tokens=1000,
+            max_tokens=4000,
             temperature=0,
         )
 
         # Structured Output解析
         tool_calls = response.choices[0].message.tool_calls
-        
-        arguments = tool_calls[0].function.arguments
 
-        # JSONパース
-        parsed_arguments = json.loads(arguments)
-        requirements = parsed_arguments.get("requirements", [])
+        if tool_calls: # tool_calls が存在する場合のみ処理を行うように修正
+            arguments = tool_calls[0].function.arguments
 
-        if not requirements:
-            raise ValueError("要件が生成されませんでした。")
+            # JSONパース
+            parsed_arguments = json.loads(arguments)
+            requirements = parsed_arguments.get("requirements", [])
 
-        logging.info("要件が正常に生成されました。")
-        requirements = "\n".join(requirements)
-        return requirements
+            if not requirements:
+                raise ValueError("要件が生成されませんでした。")
+
+            logging.info("要件が正常に生成されました。")
+            requirements = "\n".join(requirements)
+            return requirements
+        else: # tool_calls が存在しない場合は、テキストで回答をそのまま返すように修正
+            logging.warning("Function calling tool_calls がありませんでした。テキスト回答をそのまま返します。")
+            return response.choices[0].message.content.strip()
+
 
     except Exception as e:
         logging.error(f"OpenAI APIエラー: {str(e)}", exc_info=True)

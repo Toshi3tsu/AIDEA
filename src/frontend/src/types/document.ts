@@ -30,7 +30,7 @@ export interface Task {
   start_date: string;
   due_date: string;
   detail: string;
-  tag: '新規作成' | '更新' | 'クローズ' | '無視' | '';
+  tag: '' | '新規作成' | '更新' | 'クローズ' | '無視';
 }
 
 export interface ThreadsByTag {

@@ -42,8 +42,8 @@ export default function Dashboard() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [allNewsList, setAllNewsList] = useState<NewsArticle[][]>([]);
   const [loadingNews, setLoadingNews] = useState(false);
-  let lastFetchedTime = 0; // lastFetchedTime を変数として定義
-  const NEWS_PER_COLUMN = 6;
+  let lastFetchedTime = 0;
+  const NEWS_PER_COLUMN = 5;
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [currentNewsList, setCurrentNewsList] = useState<NewsArticle[]>([]);
@@ -78,11 +78,11 @@ export default function Dashboard() {
       }, [allNewsList, currentPage, selectedKeywordIndex, newsKeywords]);
 
   const applyPagination = (newsForKeyword: NewsArticle[]) => {
-      const startIndex = (currentPage - 1) * NEWS_PER_COLUMN * 3;
-      const endIndex = startIndex + NEWS_PER_COLUMN * 3;
+      const startIndex = (currentPage - 1) * NEWS_PER_COLUMN * 4;
+      const endIndex = startIndex + NEWS_PER_COLUMN * 4;
       const paginatedNews = newsForKeyword.slice(startIndex, endIndex);
       setCurrentNewsList(paginatedNews);
-      setTotalPages(Math.ceil(newsForKeyword.length / (NEWS_PER_COLUMN * 3)) || 1);
+      setTotalPages(Math.ceil(newsForKeyword.length / (NEWS_PER_COLUMN * 4)) || 1);
   };
 
   const fetchProjects = async () => {
@@ -168,7 +168,7 @@ export default function Dashboard() {
           <p>ニュース読み込み中...</p>
         ) : (
           <div className="bg-white shadow rounded-lg p-4">
-            <div className="md:grid md:grid-cols-3 md:gap-4">
+            <div className="md:grid md:grid-cols-4 md:gap-4">
               <ul className="space-y-2">
                 {currentNewsList.slice(0, NEWS_PER_COLUMN).map((article, articleIndex) => (
                   <li key={articleIndex} className="mb-2 pb-2 border-b last:border-b-0">
@@ -199,6 +199,20 @@ export default function Dashboard() {
               </ul>
               <ul className="space-y-2">
                 {currentNewsList.slice(NEWS_PER_COLUMN * 2, NEWS_PER_COLUMN * 3).map((article, articleIndex) => (
+                  <li key={articleIndex} className="mb-2 pb-2 border-b last:border-b-0">
+                    <a href={article.link} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline text-sm">
+                      {article.title}
+                    </a>
+                    {article.pubDate && (
+                      <p className="text-gray-500 text-xs">
+                        {new Date(article.pubDate).toLocaleString()}
+                      </p>
+                    )}
+                  </li>
+                ))}
+              </ul>
+              <ul className="space-y-2">
+                {currentNewsList.slice(NEWS_PER_COLUMN * 3, NEWS_PER_COLUMN * 4).map((article, articleIndex) => (
                   <li key={articleIndex} className="mb-2 pb-2 border-b last:border-b-0">
                     <a href={article.link} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline text-sm">
                       {article.title}

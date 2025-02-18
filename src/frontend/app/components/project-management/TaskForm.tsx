@@ -2,7 +2,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Task } from '../../project-management/page';
+import { Task } from '../../../src/types/document';
 import useProjectStore from '../../store/projectStore';
 import axios from 'axios';
 

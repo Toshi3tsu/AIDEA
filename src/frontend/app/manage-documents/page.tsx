@@ -80,7 +80,7 @@ export default function ManageDocumentsPage() {
       </div>
 
       {/* 右側: チャット */}
-      <div className="flex-1 p-4">
+      <div className="flex-1 px-4">
         <Chat />
       </div>
     </div>

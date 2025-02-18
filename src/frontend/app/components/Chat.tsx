@@ -16,6 +16,7 @@ export default function Chat() {
     selectedProject,
     sessionTitles,
     setSessionTitles,
+    selectedThreads,
     selectedUploadedFiles,
   } = useProjectStore();
   const { selectedModel } = useModelStore();
@@ -111,9 +112,21 @@ export default function Chat() {
         source_path: response.data.source_path || null,
         source_ids: response.data.source_ids || [],
       };
-
-      // 応答表示後、DBに自動保存される前提なので、再度チャット履歴を取得する（またはローカル状態に反映）
       setMessages((prev) => [...prev, aiMsg]);
+
+      // チャット履歴保存APIを呼び出す
+      const saveRequest = {
+        session_id: currentSessionId,
+        project_id: selectedProject.id,
+        session_title: sessionTitle,
+        messages: [userMsg, aiMsg] // 送信メッセージとAI応答のみを送信
+      };
+      await axios.post('http://127.0.0.1:8000/api/chat_history/save', saveRequest);
+
+      // セッション一覧を更新 (新規セッションの場合など)
+      if (selectedProject) {
+        await fetchSessionTitles(selectedProject.id);
+      }
     } catch (error) {
       console.error('メッセージ送信に失敗:', error);
       const errorMsg: MessageItem = {
@@ -246,11 +259,31 @@ export default function Chat() {
     </div>
   );
 
+  const getSelectedSourcesLabel = () => {
+    const selectedFileLabels = selectedUploadedFiles;
+    const selectedThreadLabels = selectedThreads.map(threadId => {
+      const thread = threadsByTag.flatMap(tbt => tbt.threads).find(thread => thread.ts === threadId);
+      return thread ? `（スレッド）${thread.text.substring(0, 20)}...` : `（スレッド ID: ${threadId}）`; // スレッドが見つからない場合のfallback
+    });
+
+    const allSelectedLabels = [...selectedFileLabels, ...selectedThreadLabels];
+
+    if (allSelectedLabels.length === 0) {
+      return `選択ソース: なし`;
+    } else if (allSelectedLabels.length === 1) {
+      return `選択ソース: ${allSelectedLabels[0]}`;
+    } else {
+      return `選択ソース: ${allSelectedLabels[0]} 他${allSelectedLabels.length - 1}ソース`;
+    }
+  };
+
+  const selectedSourcesLabel = getSelectedSourcesLabel();
+
   return (
     <div className="flex h-full">
       {/* チャット領域 */}
-      <div className="flex-1 flex flex-col p-4">
-        <div className="mb-4">
+      <div className="flex-1 flex flex-col px-4">
+        {/* <div className="mb-4">
           <label className="block text-sm font-semibold mb-1">セッション名</label>
           <input
             type="text"
@@ -259,10 +292,10 @@ export default function Chat() {
             placeholder="セッション名を入力してください..."
             className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
           />
-        </div>
+        </div> */}
 
         {/* チャット履歴表示 */}
-        <div className="flex-1 bg-white p-4 rounded shadow mb-4" style={{ overflowY: 'auto', height: 'calc(100% - 2rem)' }}>
+        <div className="flex-1 bg-white rounded shadow mb-2 py-2" style={{ overflowY: 'auto' }}>
           <ScrollableFeed>
             {messages
               .slice()
@@ -272,7 +305,7 @@ export default function Chat() {
                   key={index}
                   className={`mb-2 mr-2 ${msg.sender === 'user' ? 'text-right' : 'text-left'}`}
                 >
-                  <div className={`inline-block max-w-[70%] rounded-lg px-4 py-2 ${msg.sender === 'user' ? 'bg-gray-100 text-gray-800' : 'bg-white text-black'}`}>
+                  <div className={`inline-block max-w-[90%] rounded-lg px-4 py-2 ${msg.sender === 'user' ? 'bg-gray-100 text-gray-800 inline-block max-w-[70%]' : 'bg-white text-black'}`}>
                     {msg.sender === 'ai' ? (
                       <div className="flex items-start">
                         <div className="flex-shrink-0 mt-1 mr-2">
@@ -320,6 +353,13 @@ export default function Chat() {
             {sending ? <LoadingIndicator /> : <Send className="h-5 w-5" />}
           </button>
         </form>
+
+        {/* 選択されたソースの名称を表示 */}
+        {Boolean(selectedSourcesLabel) && (
+          <div className="mt-2 text-xs text-gray-600">
+            {selectedSourcesLabel}
+          </div>
+        )}
       </div>
 
         {/* {showMaskingModal && (

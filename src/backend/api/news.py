@@ -76,7 +76,7 @@ async def update_keywords(keywords: List[str], db: Session = Depends(get_db)):
         # 古いキーワードを削除 (特定のuser_idに関連するもののみ)
         db.query(DBNewsKeyword).filter(DBNewsKeyword.user_id == user_id).delete()
         for keyword_str in keywords:
-            keyword = NewsKeywordCreate(keyword=keyword_str)
+            keyword = NewsKeywordCreate(keyword=keyword_str, user_id=user_id)
             db_keyword = DBNewsKeyword(**keyword.dict())
             db.add(db_keyword)
         db.commit()
