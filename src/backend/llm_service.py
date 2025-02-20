@@ -164,7 +164,6 @@ async def generate_query_variations(text: str) -> List[str]:
         logging.error(f"言い換えパターンの生成中にエラーが発生しました: {str(e)}", exc_info=True)
         raise RuntimeError(f"言い換えパターンの生成中にエラーが発生しました: {str(e)}")
 
-@traceable
 def generate_bpmn_flow(customer_info: str, issues: str, model: str = "gpt-4o-mini") -> str:
     """
     顧客情報と課題に基づいて、BPMN XML形式の業務フローを生成します。
@@ -245,7 +244,7 @@ def generate_bpmn_flow(customer_info: str, issues: str, model: str = "gpt-4o-min
         }]
 
         response = client.chat.completions.create(
-            model=model,
+            model=MODEL_CONFIG[model]["api_model_name"],
             messages=[
                 {"role": "system", "content": "あなたは、経験豊富な業務/ITコンサルタントです。"},
                 {"role": "user", "content": prompt},

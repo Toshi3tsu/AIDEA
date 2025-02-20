@@ -115,10 +115,10 @@ async def chat_endpoint(chat_request: ChatRequest, db: Session = Depends(get_db)
             pass
         # ファイルが単一選択された場合 (source_id と source_content を使用)
         elif chat_request.source_type == 'file' and chat_request.source_name and chat_request.source_content:
-            context = f"### 以下は選択されたファイルの内容です:\n{chat_request.source_content}\n\n"
+            context = f"### 以下は選択されたファイルの内容です。回答に利用します。:\n{chat_request.source_content}\n\n"
         # Slackスレッドが選択された場合 (source_id と source_content を使用)
         elif chat_request.source_type == 'thread' and chat_request.source_name and chat_request.source_content:
-            context = f"### 以下は選択されたSlackスレッドの内容です:\n{chat_request.source_content}\n\n"
+            context = f"### 以下は選択されたSlackスレッドの内容です。回答に利用します。:\n{chat_request.source_content}\n\n"
 
         system_message_content = "あなたは優秀な業務アシスタントAIです。\n" + context
 

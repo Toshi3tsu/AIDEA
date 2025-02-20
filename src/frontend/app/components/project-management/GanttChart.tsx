@@ -1,46 +1,119 @@
 // src/frontend/app/components/project-management/GanttChart.tsx
 'use client';
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Task } from '../../../src/types/document';
-import 'dhtmlx-gantt'; // dhtmlx-gantt の本体をインポート
-import 'dhtmlx-gantt/codebase/dhtmlxgantt.css'; // CSS は念のためこちらもインポート (不要な場合は削除可)
+import 'dhtmlx-gantt/codebase/dhtmlxgantt.css'; // CSS は念のためこちらもインポート
 
 interface GanttChartDhtmlxProps {
   currentTasks: Task[];
+  projectId: number | undefined;
 }
 
-const GanttChartDhtmlx: React.FC<GanttChartDhtmlxProps> = ({ currentTasks }) => {
+const GanttChartDhtmlx: React.FC<GanttChartDhtmlxProps> = ({ currentTasks, projectId }) => {
   const ganttContainerRef = useRef<HTMLDivElement>(null);
+  const isEventListenerAttached = useRef(false);
+  const eventIdRef = useRef<number | null>(null);
 
   useEffect(() => {
-    if (!ganttContainerRef.current) return;
+    console.log("GanttChartDhtmlx useEffect 発火, currentTasks:", currentTasks); // currentTasks の変化をログ出力
+    if (!ganttContainerRef.current || projectId === undefined) return;
+  
+    const initializeGantt = async () => {
+      // dhtmlx-gantt を動的インポート
+      const ganttModule = await import('dhtmlx-gantt'); 
+      const gantt = (window as any).gantt || ganttModule;
+  
+      // 編集機能を有効にするために、editableをtrueに設定
+      gantt.config.editable = true;
+  
+      // Gantt の初期化
+      gantt.init(ganttContainerRef.current);
+  
+      // タスクデータを DHTMLX Gantt の形式に変換
+      const ganttTasks = {
+        data: currentTasks.map((task) => ({
+          id: task.id,
+          text: task.title,
+          start_date: new Date(task.start_date),
+          end_date: new Date(task.due_date),
+          duration: 1,
+          progress: 0,
+          // 他のプロパティが必要な場合はここに追加
+        })),
+        links: [],
+      };
+  
+      // データの読み込み
+      gantt.parse(ganttTasks);
+  
+      if (!isEventListenerAttached.current) { // ref.currentで判定
+        if ((window as any).gantt) { // gantt オブジェクトが存在することを確認
+          let eventCount = 0;
+          const onAfterTaskUpdateHandler = async (id: number, updatedTask: any) => {
+            eventCount++;
+            console.log(`onAfterTaskUpdate イベント発火 ${eventCount}回目`, id, updatedTask);
 
-    // Gantt の初期化
-    (window as any).gantt.init(ganttContainerRef.current); // window.gantt としてアクセス
+            const updateData = {
+              title: updatedTask.text,
+              start_date: updatedTask.start_date,
+              due_date: updatedTask.end_date,
+            };
 
-    // タスクデータを DHTMLX Gantt の形式に変換
-    const ganttTasks = {
-      data: currentTasks.map((task, index) => ({
-        id: index + 1, // DHTMLX Gantt の id は数値である必要あり
-        text: task.title,
-        start_date: new Date(task.start_date), // Dateオブジェクトに変換
-        end_date: new Date(task.due_date), // Dateオブジェクトに変換
-        duration: 1, // デフォルトのタスク期間 (日単位、必要に応じて調整)
-        progress: 0, // 進捗率 (0-1)
-      })),
-      links: [], // リンク機能は今回は使用しないため空
+            try {
+              const response = await fetch(`http://127.0.0.1:8000/api/project_tasks/${id}`, {
+                method: 'PUT',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(updateData),
+              });
+
+              if (!response.ok) {
+                console.error('タスク更新APIエラー', response.status, response.statusText);
+                gantt.message({
+                  type: "error",
+                  text: "タスクの更新に失敗しました。"
+                });
+                return;
+              }
+
+              const responseData = await response.json();
+              console.log('タスク更新API成功', responseData);
+              gantt.message("タスクを更新しました。");
+            } catch (error) {
+              console.error('タスク更新APIリクエストエラー', error);
+              gantt.message({
+                type: "error",
+                text: "タスクの更新中にエラーが発生しました。"
+              });
+            }
+          };
+          const eventId = gantt.attachEvent("onAfterTaskUpdate", onAfterTaskUpdateHandler); // イベントIDを取得
+          eventIdRef.current = eventId; // refにイベントIDを保存
+          console.log("onAfterTaskUpdate イベントリスナー登録");
+          isEventListenerAttached.current = true; // ref.currentを更新
+        }
+      }
     };
-
-    // データの読み込み
-    (window as any).gantt.parse(ganttTasks); // window.gantt としてアクセス
-
+  
+    initializeGantt();
+  
     return () => {
-      // コンポーネントアンマウント時に Gantt を破棄 (メモリリーク対策)
-      (window as any).gantt.clearAll(); // window.gantt としてアクセス
-      // (window as any).gantt.destroy(); // window.gantt としてアクセス
+      // コンポーネントアンマウント時に、window.gantt が存在する場合のみ clearAll() を実行する
+      if ((window as any).gantt) {
+        if (eventIdRef.current) {
+          (window as any).gantt.detachEvent(eventIdRef.current); // イベントIDを使ってdetach
+          eventIdRef.current = null; // イベントIDをリセット
+          console.log("onAfterTaskUpdate イベントリスナー解除");
+        }
+        (window as any).gantt.clearAll();
+        console.log("Gantt Chart cleared");
+        isEventListenerAttached.current = false; // ref.currentをリセット (念のため)
+      }
+      // ※ 必要に応じて destroy() を使用しても良い
     };
-  }, [currentTasks]);
+  }, [currentTasks, projectId]);
 
   return (
     <div>

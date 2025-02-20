@@ -19,6 +19,14 @@ class ProjectTaskCreate(BaseModel): # POSTリクエスト用
     user_id: str # user_id を追加
     project_id: int # project_id を追加
 
+class ProjectTaskUpdate(BaseModel): # PUTリクエスト用
+    title: Optional[str] = None
+    assignee: Optional[str] = None
+    start_date: Optional[datetime] = None
+    due_date: Optional[datetime] = None
+    detail: Optional[str] = None
+    tag: Optional[str] = None
+
 class ProjectTaskBase(BaseModel):
     title: str
     assignee: str
@@ -61,3 +69,24 @@ def create_project_task(task: ProjectTaskCreate, db: Session = Depends(get_db)):
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to create project task: {str(e)}")
+
+@router.put("/{task_id}", response_model=ProjectTaskResponse)
+def update_project_task(task_id: int, task_update: ProjectTaskUpdate, db: Session = Depends(get_db)):
+    try:
+        db_task = db.query(ProjectTask).filter(ProjectTask.id == task_id).first()
+        if not db_task:
+            raise HTTPException(status_code=404, detail="Task not found")
+
+        # 更新可能なフィールドを更新
+        update_data = task_update.dict(exclude_unset=True) # OptionalなフィールドでNoneのものは除外
+        for key, value in update_data.items():
+            setattr(db_task, key, value)
+
+        db.commit()
+        db.refresh(db_task)
+        return db_task
+    except HTTPException as http_exc:
+        raise http_exc # NotFoundエラーはそのまま再Raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to update project task: {str(e)}")

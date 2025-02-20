@@ -4,6 +4,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Task } from '../../../src/types/document';
 import axios from 'axios';
+import useProjectStore from '../../store/projectStore'; // 追加：抽出タスクを更新するため
 
 interface TaskListProps {
   extractedTasks: Task[];
@@ -12,7 +13,9 @@ interface TaskListProps {
 }
 
 const TaskList: React.FC<TaskListProps> = ({ extractedTasks, currentTasks, setCurrentTasks }) => {
-  console.log('TaskList extractedTasks:', extractedTasks);
+  // storeからsetExtractedTasksを取得（抽出タスクの更新用）
+  const { selectedProject, setExtractedTasks } = useProjectStore();
+
   const [linkedPairs, setLinkedPairs] = useState<{ extractedIndex: number; currentIndex: number }[]>([]);
 
   // ドットの参照用 ref
@@ -35,23 +38,61 @@ const TaskList: React.FC<TaskListProps> = ({ extractedTasks, currentTasks, setCu
     }
   };
 
-  const handleLinkTasks = () => {
+  const handleLinkTasks = async () => {
+    // まず、既存の紐づけ（新規以外）のタスクについては更新
     const updatedTasks = [...currentTasks];
-    const newTasks = [];
-
     linkedPairs.forEach(({ extractedIndex, currentIndex }) => {
       const extractedTask = extractedTasks[extractedIndex];
-
-      if (currentIndex !== -1) {
-        // 上書き
+      // 紐づけ対象が既存タスクかつ「新規作成」以外なら上書き更新
+      if (currentIndex !== -1 && extractedTask.tag !== '新規作成') {
         updatedTasks[currentIndex] = { ...extractedTask };
-      } else if (extractedTask?.tag === '新規作成') {
-        // 新規追加
-        newTasks.push(extractedTask);
       }
     });
 
-    setCurrentTasks([...updatedTasks, ...newTasks]);
+    // 次に、抽出タスク全体の中から「新規作成」タグのタスクを抽出（紐づけ済みかどうかは問わない）
+    const newTasks = extractedTasks.filter((task) => task.tag === '新規作成');
+    const createdTasks = [];
+
+    // 各新規タスクをDBに登録（POSTリクエスト）
+    for (const task of newTasks) {
+      try {
+        // ※バックエンド側のエンドポイントURLや必要なフィールド（project_id, user_id など）に合わせて調整してください
+        const response = await axios.post('http://127.0.0.1:8000/api/project_tasks/', {
+          title: task.title,
+          assignee: task.assignee,
+          start_date: task.start_date || new Date().toISOString(), // 例：現在時刻をデフォルト値として設定
+          due_date: task.due_date,
+          detail: task.detail,
+          tag: task.tag,
+          user_id: "user_888",
+          project_id: task.project_id || (selectedProject ? selectedProject.id : 0),
+        });
+        createdTasks.push(response.data);
+      } catch (error) {
+        console.error('タスクの作成に失敗しました:', error);
+      }
+    }
+
+    // 現在のタスク一覧に更新・新規登録したタスクを反映
+    setCurrentTasks([...updatedTasks, ...createdTasks]);
+
+    // 次に、抽出タスク一覧から「処理済み」のタスクを削除する
+    // 「処理済み」とは、（a）紐づけ対象として処理されたタスク（linkedPairsに含まれるタスク）
+    // 　　　　　（b）「新規作成」タグのタスク（常にDBに登録済み）
+    const processedExtractedIndices = new Set<number>([
+      ...linkedPairs.map((pair) => pair.extractedIndex),
+      ...extractedTasks
+        .map((task, index) => (task.tag === '新規作成' ? index : -1))
+        .filter((index) => index !== -1),
+    ]);
+    const remainingExtractedTasks = extractedTasks.filter(
+      (_, index) => !processedExtractedIndices.has(index)
+    );
+    setExtractedTasks(remainingExtractedTasks);
+
+    // リンク済みペアもクリア
+    setLinkedPairs([]);
+
     alert('タスクの紐づけが完了しました。');
   };
 
@@ -115,6 +156,7 @@ const TaskList: React.FC<TaskListProps> = ({ extractedTasks, currentTasks, setCu
             <li
               key={index}
               className={`mb-4 border-b pb-2 flex items-center ${
+                // 「新規作成」タスクは紐づけ不可なのでopacity-50で表示するなどの調整も可能
                 canSelectExtractedTask(task) ? '' : 'opacity-50'
               }`}
             >
@@ -133,6 +175,7 @@ const TaskList: React.FC<TaskListProps> = ({ extractedTasks, currentTasks, setCu
                     : ''
                 }`}
                 onClick={() =>
+                  // 「更新」「クローズ」のタスクのみ選択可能とする場合は条件チェック
                   canSelectExtractedTask(task) && handleDotClick(index, 'extracted')
                 }
               />
@@ -154,10 +197,7 @@ const TaskList: React.FC<TaskListProps> = ({ extractedTasks, currentTasks, setCu
         <h2 className="text-xl font-semibold mb-2">現在のタスク</h2>
         <ul className="border p-2 rounded">
           {currentTasks.map((task, index) => (
-            <li
-              key={index}
-              className="mb-4 border-b pb-2 flex items-center"
-            >
+            <li key={index} className="mb-4 border-b pb-2 flex items-center">
               <div
                 ref={(el) => (rightDotRefs.current[index] = el)} // 右側のドットの ref
                 className={`w-4 h-4 rounded-full bg-green-500 cursor-pointer ${
@@ -178,7 +218,7 @@ const TaskList: React.FC<TaskListProps> = ({ extractedTasks, currentTasks, setCu
         </ul>
       </div>
 
-      <div className="flex justify-center mt-4 w-full absolute bottom-0 left-0 p-4"> {/* bg-white を追加 */}
+      <div className="flex justify-center mt-4 w-full absolute bottom-0 left-0 p-4">
         <button
           onClick={handleLinkTasks}
           className="px-4 py-2 bg-[#BF4242] text-white rounded hover:bg-[#A53939]"

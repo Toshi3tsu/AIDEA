@@ -25,6 +25,7 @@ export interface SelectionOption {
 }
 
 export interface Task {
+  id: number;
   title: string;
   assignee: string;
   start_date: string;

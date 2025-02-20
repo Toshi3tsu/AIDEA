@@ -2,7 +2,7 @@
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 import os
 import glob
@@ -16,6 +16,7 @@ import json
 import re
 import requests
 from pptx import Presentation
+import pytz
 try:
     import pytesseract
     from PIL import Image
@@ -24,6 +25,9 @@ except ImportError:
     pytesseract = None
 
 router = APIRouter()
+
+# JSTタイムゾーンを定義
+JST = pytz.timezone('Asia/Tokyo')
 
 # Pydanticモデルの定義
 class ProjectBase(BaseModel):
@@ -388,13 +392,14 @@ async def extract_text_from_file(project_id: int, filename: str, db: Session = D
     if uploaded_file:
         uploaded_file.processed = True
         uploaded_file.processed_text = extracted_text
+        uploaded_file.creation_date = datetime.now(JST)
     else:
         # ファイルがDBに存在しない場合は、processed=Trueとprocessed_textを設定して新規作成 (通常はlist-local-filesで事前登録されるはず)
         new_file = UploadedFile(
             source_name=filename,
             source_path=file_path,  # フルパスを保存
             project_id=project_id,
-            creation_date=datetime.utcnow(),
+            creation_date=datetime.now(JST),
             processed=True,
             processed_text=extracted_text
         )
@@ -521,19 +526,23 @@ async def list_local_files(req: LocalFileRequest, db: Session = Depends(get_db))
             if existing_file:
                 # 既存のレコードがあれば、ファイルの最終更新日時を比較
                 if existing_file.creation_date < file_last_modified:
+                    print(f"ファイルが更新されました: {filename}") # デバッグログ
                     existing_file.processed = False
                     existing_file.processed_text = None
+                    existing_file.creation_date = file_last_modified # creation_dateを更新 (最終処理日時をファイル最終更新日時に更新)
                     db_changed = True # 更新があったのでフラグを立てる
                 else:
+                    print(f"ファイルは更新されていません: {filename}") # デバッグログ
                     pass # 更新不要
             else:
                 # 新規レコードの場合のみ挿入
+                print(f"新規ファイル: {filename}") # デバッグログ
                 new_file = UploadedFile(
                     source_name=source_name,
                     source_path=source_path,
                     project_id=project_id,
-                    creation_date=file_last_modified,
-                    processed=False,
+                    creation_date=file_last_modified, # 新規作成時はファイル最終更新日時をcreation_dateに設定
+                    processed=False, # 新規ファイルは未処理
                     processed_text=None
                 )
                 db.add(new_file)

@@ -221,16 +221,24 @@ async def update_stage(
 
 # 業務フローの更新
 @router.put("/{project_id}/flow", response_model=ProjectOut)
-async def update_flow(project_id: int = Path(..., gt=0), flow: FlowUpdate = None):
-    df = read_projects()
-    if project_id not in df['id'].values:
+async def update_flow(
+    project_id: int = Path(..., gt=0), 
+    flow: FlowUpdate = None, 
+    db: Session = Depends(get_db)
+):
+    # 指定されたIDのプロジェクトをDBから取得
+    db_project = db.query(Project).filter(Project.id == project_id).first()
+    if not db_project:
         raise HTTPException(status_code=404, detail="Project not found")
-    index = df.index[df['id'] == project_id].tolist()[0]
-    if flow.bpmn_xml:
-        df.at[index, 'bpmn_xml'] = flow.bpmn_xml
-    write_projects(df)
-    updated_project = df.loc[index].to_dict()
-    return ProjectOut(**updated_project)
+    
+    # BPMN XMLが存在する場合、DB上のフィールドを更新
+    if flow and flow.bpmn_xml:
+        db_project.bpmn_xml = flow.bpmn_xml
+    
+    db.commit()
+    db.refresh(db_project)
+    
+    return db_project
 
 @router.put("/{project_id}/requirements", response_model=ProjectOut)
 async def update_requirements(project_id: int = Path(..., gt=0), req_update: RequirementsUpdate = None, db: Session = Depends(get_db)):

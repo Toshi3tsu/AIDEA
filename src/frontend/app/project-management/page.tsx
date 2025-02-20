@@ -11,7 +11,11 @@ import TaskForm from '../components/project-management/TaskForm';
 import GanttChart from '../components/project-management/GanttChart';
 import { Task } from '../../src/types/document';
 
+let renderCount = 0;
+
 export default function ProjectManagement() {
+  renderCount++;
+  console.log(`ProjectManagement コンポーネント レンダリング ${renderCount}回目`); // レンダリング回数をログ出力
   useEffect(() => {
     document.querySelector('.page-title')!.textContent = 'プロジェクト管理AI';
     const iconContainer = document.querySelector('.page-icon')!;
@@ -23,28 +27,51 @@ export default function ProjectManagement() {
   }, []);
   const { selectedProject, setExtractedTasks, extractedTasks } = useProjectStore(); // extractedTasksを取得
   const [currentTasks, setCurrentTasks] = useState<Task[]>([]);
+  const isInitialLoad = useRef(true); // 初回ロード判定用のrefを追加
 
   // APIからタスクを取得
   useEffect(() => {
     const fetchTasks = async () => {
-      if (!selectedProject) return;
-
+      if (!selectedProject) {
+        setExtractedTasks([]); // selectedProject が null の場合も extractedTasks をクリア
+        setCurrentTasks([]); // currentTasksもクリア
+        return;
+      }
+  
       try {
-        const response = await axios.get(`http://127.0.0.1:8000/api/project_tasks?project_id=${selectedProject.id}`); // APIエンドポイントにリクエスト
-
-        const tasks = response.data || [];
-
-        setExtractedTasks(tasks); // データをzustandに保存
-        setCurrentTasks(tasks);
+        const response = await axios.get(`http://127.0.0.1:8000/api/project_tasks?project_id=${selectedProject.id}`);
+        const tasksFromDB = response.data || [];
+  
+        // DBからの取得結果は currentTasks にのみセット
+        setCurrentTasks(tasksFromDB);
+  
+        // 初回ロード時のみ extractedTasks を初期化する
+        if (isInitialLoad.current) {
+          if (!extractedTasks || extractedTasks.length === 0) {
+            setExtractedTasks(tasksFromDB);
+          }
+          isInitialLoad.current = false;
+        }
       } catch (error) {
         console.error('タスクの取得に失敗しました:', error);
-        setExtractedTasks([]);
         setCurrentTasks([]);
       }
     };
-
+  
     fetchTasks();
-  }, [selectedProject, setExtractedTasks]);
+    // 依存配列を selectedProject のみにする
+  }, [selectedProject]);
+
+  // extractedTasks が更新されたら currentTasks を更新 (StoreとUIの同期を強化)
+  useEffect(() => {
+    if (extractedTasks && extractedTasks.length > 0) {
+      setCurrentTasks(extractedTasks); // extractedTasks を currentTasks に反映
+    } else if (selectedProject) {
+      // extractedTasks が空で selectedProject が存在する場合、再度APIから取得するなどの処理も検討可能
+      // 今回は空の場合は currentTasks も空にする
+      setCurrentTasks([]);
+    }
+  }, [extractedTasks, selectedProject]);
 
   const handleAddTask = (newTask: Task) => {
     setCurrentTasks([...currentTasks, newTask]);
@@ -55,7 +82,10 @@ export default function ProjectManagement() {
       <div className="flex flex-col h-full">
         {/* 上側のタスクリストをDHTMLX Ganttチャートに変更 */}
         <div className="h-1/3 overflow-y-auto mb-6">
-          <GanttChart currentTasks={currentTasks} /> {/* GanttChartDhtmlx を使用 */}
+          <GanttChart
+            currentTasks={currentTasks}
+            projectId={selectedProject?.id} // projectId を渡す
+          />
         </div>
 
         {/* 下側の領域を左右に分割 */}

@@ -1,7 +1,7 @@
 // src/frontend/app/components/Chat.tsx
 'use client';
 
-import React, { useState, useEffect, FormEvent } from 'react';
+import React, { useState, useEffect, useRef, FormEvent } from 'react';
 import axios from 'axios';
 import ScrollableFeed from 'react-scrollable-feed';
 import ReactMarkdown from 'react-markdown';
@@ -279,6 +279,22 @@ export default function Chat() {
 
   const selectedSourcesLabel = getSelectedSourcesLabel();
 
+  // textarea 要素への ref を作成
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // textarea の高さを調整する関数
+  const adjustTextareaHeight = () => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto'; // 一旦 auto にしてscrollHeightをリセット
+      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 200)}px`; // 最大高さを200pxに制限 (10行程度)
+    }
+  };
+
+  // inputMessage が変更されたときに高さを調整
+  useEffect(() => {
+    adjustTextareaHeight();
+  }, [inputMessage]);
+
   return (
     <div className="flex h-full">
       {/* チャット領域 */}
@@ -337,13 +353,15 @@ export default function Chat() {
           }
         }} className="flex items-center">
           <textarea
+            ref={textareaRef}
             value={inputMessage}
             onChange={(e) => setInputMessage(e.target.value)}
             placeholder="メッセージを入力..."
-            className="flex-1 border rounded-l-lg px-4 py-2 focus:outline-none resize-none"
+            className="flex-1 border rounded-l-lg px-4 py-2 focus:outline-none resize-none overflow-y-hidden"
             disabled={sending}
             rows={1}
-            style={{ maxHeight: '100px', overflowY: 'auto' }}
+            style={{ maxHeight: '200px', overflowY: 'hidden' }}
+            onInput={adjustTextareaHeight}
           />
           <button
             type="submit"
@@ -391,11 +409,11 @@ export default function Chat() {
             </button>
           </div>
           {selectedProject ? (
-            <div className="max-h-180 overflow-y-auto border border-gray-200 rounded p-1">
+            <div className="max-h-180 overflow-y-auto"> {/* border border-gray-200 rounded p-1"> */}
               {orderedGroupKeys.length > 0 ? (
                 orderedGroupKeys.map((groupKey) => (
                   <div key={groupKey}>
-                    <div className="px-2 py-1 bg-gray-200 text-xs font-bold text-gray-700">
+                    <div className="py-1 text-xs font-bold mt-4 mb-2">
                       {groupKey}
                     </div>
                     <ul>
